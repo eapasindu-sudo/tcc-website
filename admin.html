@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>Events Admin · Thelijjawila Central College</title>
+<title>Website Admin · Thelijjawila Central College</title>
 <link rel="icon" href="assets/logo-color.webp">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=Marcellus&display=swap">
 <style>
@@ -47,7 +47,7 @@
 <body>
 <header>
   <img src="assets/logo-color.webp" alt="">
-  <h1>Events Admin</h1>
+  <h1>Website Admin</h1>
   <a href="./">View website →</a>
 </header>
 
@@ -119,6 +119,24 @@
     <section class="card">
       <h2>All events</h2>
       <div class="list" id="list"></div>
+    </section>
+
+    <!-- Notice board -->
+    <section class="card" id="noticesCard">
+      <h2 id="nFormTitle">Add a notice</h2>
+      <form id="nForm" class="grid">
+        <label class="full">Title *<input id="n-title" required></label>
+        <label>Date *<input id="n-date" type="date" required></label>
+        <label>For
+          <select id="n-grade"><option value="all">All grades</option><option value="6-9">Grades 6 – 9</option><option value="10-11">Grades 10 – 11</option><option value="12-13">Grades 12 – 13</option></select>
+        </label>
+        <label class="full">Notice text<textarea id="n-text"></textarea></label>
+        <label class="full">Link to a file or form (optional)<input id="n-link" type="url" placeholder="https://..."></label>
+        <div class="row full"><button type="submit" id="nSaveBtn">Save notice</button><button type="button" class="ghost" id="nCancelBtn" hidden>Cancel editing</button></div>
+      </form>
+      <p id="nStatus"></p>
+      <h2 style="margin-top:20px">All notices</h2>
+      <div class="list" id="nList"></div>
     </section>
   </div>
 </main>
@@ -246,6 +264,7 @@ async function start() {
     $("loginCard").hidden = true; $("setupCard").hidden = true; $("app").hidden = false;
     $("who").textContent = "Signed in. Changes appear on the website about one minute after saving.";
     renderList();
+    await loadNotices();
   } catch (err) {
     token = "";
     try { sessionStorage.removeItem("tcc-admin-token"); } catch (e) {}
@@ -330,6 +349,54 @@ $("list").onclick = async (ev) => {
     catch (err) { say($("status"), err.message, false); del.disabled = false; }
   }
 };
+
+
+/* ---------- Notice board (data/notices.json) ---------- */
+const N_API = `https://api.github.com/repos/${OWNER}/${REPO}/contents/data/notices.json`;
+const GRADES = { all: "All grades", "6-9": "Grades 6 – 9", "10-11": "Grades 10 – 11", "12-13": "Grades 12 – 13" };
+let notices = [], nEditing = -1;
+async function loadNotices() {
+  const r = await fetch(`${N_API}?ref=${BRANCH}&t=${Date.now()}`, { headers: headers() });
+  notices = r.ok ? JSON.parse(b64decode((await r.json()).content) || "[]") : [];
+  renderNotices();
+}
+async function commitNotices(list, message) {
+  const r0 = await fetch(`${N_API}?ref=${BRANCH}&t=${Date.now()}`, { headers: headers() });
+  const body = { message, branch: BRANCH, content: b64encode(JSON.stringify(list.slice().sort((a, b) => b.date.localeCompare(a.date)), null, 2) + "\n") };
+  if (r0.ok) body.sha = (await r0.json()).sha;
+  const r = await fetch(N_API, { method: "PUT", headers: headers(), body: JSON.stringify(body) });
+  if (!r.ok) throw new Error("Save failed (" + r.status + ").");
+  notices = list.slice().sort((a, b) => b.date.localeCompare(a.date));
+}
+function renderNotices() {
+  $("nList").innerHTML = notices.length ? notices.map((n, i) => `<div class="item"><div class="d"><b>${+n.date.slice(8)}</b>${n.date.slice(0, 7)}</div>
+    <div><h3>${esc(n.title)}</h3><small>${esc(GRADES[n.grade] || "All grades")}</small></div>
+    <div class="row"><button class="ghost" data-nedit="${i}">Edit</button><button class="danger" data-ndel="${i}">Delete</button></div></div>`).join("")
+    : `<p class="help">No notices yet.</p>`;
+}
+function nReset() { nEditing = -1; for (const k of ["title", "date", "text", "link"]) $("n-" + k).value = ""; $("n-grade").value = "all"; $("n-date").value = new Date().toISOString().slice(0, 10); $("nFormTitle").textContent = "Add a notice"; $("nCancelBtn").hidden = true; }
+$("nCancelBtn").onclick = nReset;
+$("nForm").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const n = {}; for (const k of ["title", "date", "grade", "text", "link"]) n[k] = $("n-" + k).value.trim();
+  const list = notices.slice(); if (nEditing >= 0) list[nEditing] = n; else list.push(n);
+  $("nSaveBtn").disabled = true;
+  try { await commitNotices(list, (nEditing >= 0 ? "Update notice: " : "Add notice: ") + n.title); say($("nStatus"), `Saved "${n.title}". It will show on the website in about a minute.`, true); nReset(); renderNotices(); }
+  catch (err) { say($("nStatus"), err.message, false); }
+  $("nSaveBtn").disabled = false;
+};
+$("nList").onclick = async (ev) => {
+  const ed = ev.target.closest("[data-nedit]"), del = ev.target.closest("[data-ndel]");
+  if (ed) { nEditing = +ed.dataset.nedit; const n = notices[nEditing]; for (const k of ["title", "date", "grade", "text", "link"]) $("n-" + k).value = n[k] || ""; $("nFormTitle").textContent = "Edit notice"; $("nCancelBtn").hidden = false; $("noticesCard").scrollIntoView({ behavior: "smooth" }); }
+  if (del) {
+    const i = +del.dataset.ndel;
+    if (del.dataset.confirm !== "1") { del.dataset.confirm = "1"; del.textContent = "Click again to delete"; return; }
+    del.disabled = true;
+    try { const t = notices[i].title; await commitNotices(notices.filter((_, j) => j !== i), "Delete notice: " + t); say($("nStatus"), `Deleted "${t}".`, true); renderNotices(); }
+    catch (err) { say($("nStatus"), err.message, false); del.disabled = false; }
+  }
+};
+nReset();
 
 try { localStorage.removeItem("tcc-admin-token"); token = sessionStorage.getItem("tcc-admin-token") || ""; } catch (e) {}
 resetForm();

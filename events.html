@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Events · Thelijjawila Central College</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Official website of MR/ Thelijjawila Central College, Sri Lanka. නාසති විද්‍යා සමං මිත්‍රම්">
+<link rel="icon" href="assets/logo-color.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Marcellus&family=Noto+Serif+Sinhala:wght@400;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="events">
+<script src="js/layout.js" defer></script>
+
+<main>
+  <section class="page-hero">
+    <div class="wrap">
+      <p class="crumbs"><a href="index.html">Home</a> / Events</p>
+      <span class="eyebrow">School events</span>
+      <h1>Events</h1>
+      <p>Tap any event to see the full programme, venue and who to contact.</p>
+    </div>
+  </section>
+  <section class="block" id="events">
+    <div class="wrap">
+      <div class="ev-tools">
+        <div class="chips" id="catChips">
+          <button class="chip" data-cat="All" aria-pressed="true">All</button>
+          <button class="chip" data-cat="Academic" aria-pressed="false">Academic</button>
+          <button class="chip" data-cat="Sports" aria-pressed="false">Sports</button>
+          <button class="chip" data-cat="Cultural" aria-pressed="false">Cultural</button>
+          <button class="chip" data-cat="Religious" aria-pressed="false">Religious</button>
+          <button class="chip" data-cat="Community" aria-pressed="false">Community</button>
+        </div>
+        <div class="seg" id="whenSeg">
+          <button data-when="upcoming" aria-pressed="true">Upcoming</button>
+          <button data-when="past" aria-pressed="false">Past events</button>
+        </div>
+      </div>
+      <div class="events" id="eventList"></div>
+    </div>
+  </section>
+
+<dialog class="ev-dialog" id="eventDialog" aria-label="Event details"></dialog>
+</main>
+
+<script src="js/main.js"></script>
+</body>
+</html>

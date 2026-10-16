@@ -43,12 +43,16 @@ jobs:
             node scripts/fetch-facebook.mjs
           fi
 
+      - name: Fetch YouTube videos (TCC TV)
+        continue-on-error: true
+        run: node scripts/fetch-youtube.mjs
+
       - name: Save new posts to the repository
         run: |
           git config user.name "facebook-sync"
           git config user.email "facebook-sync@users.noreply.github.com"
-          git add data/posts.json
-          git diff --cached --quiet || (git commit -m "Update Facebook posts [skip ci]" && git pull --rebase origin main && git push)
+          git add data/posts.json data/videos.json 2>/dev/null || git add data/posts.json
+          git diff --cached --quiet || (git commit -m "Update Facebook posts and videos [skip ci]" && git pull --rebase origin main && git push)
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

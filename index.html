@@ -12,8 +12,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Marcellus&family=Noto+Serif+Sinhala:wght@400;600&display=swap">
 <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
-
+<body data-page="home">
 <!-- LOADING SCREEN: black line art draws itself, then colour is painted on (js/loader.js). Click to skip. -->
 <div class="loader" id="loader" role="presentation">
   <div class="loader__logo">
@@ -27,34 +26,9 @@
 <script src="js/loader-art.js"></script>
 <script src="js/loader.js"></script>
 
-<!-- Remove this line once the real details are filled in -->
-<div class="demo-note"><div class="wrap">Preview: the achievements and notices sections still show sample text.</div></div>
-
-<header class="header">
-  <div class="wrap">
-    <a class="brand" href="#home">
-      <img src="assets/logo-color.webp" alt="School crest">
-      <span><b>Thelijjawila Central College</b><span class="si">මාර/ තෙලිජ්ජවිල මධ්‍ය විද්‍යාලය</span></span>
-    </a>
-    <button class="menu-btn" id="menuBtn" aria-expanded="false" aria-controls="nav">Menu</button>
-    <nav class="nav" id="nav">
-      <a href="#about">About</a>
-      <a href="#history">History</a>
-      <a href="#academics">Academics</a>
-      <a href="#events">Events</a>
-      <a href="#news">News</a>
-      <a href="#achievements">Achievements</a>
-      <a href="#gallery">Gallery</a>
-      <a href="#notices">Notices</a>
-      <a href="#contact">Contact</a>
-    </nav>
-  </div>
-</header>
+<script src="js/layout.js" defer></script>
 
 <main>
-  <!-- HERO with background video.
-       To add the school video: put the file at assets/school-video.mp4 (or change the src below).
-       Until a video loads, an animated maroon background is shown. -->
   <section class="hero" id="home">
     <video class="hero__video" id="heroVideo" autoplay muted loop playsinline preload="auto" poster="">
       <source src="assets/school-video.mp4" type="video/mp4">
@@ -69,8 +43,8 @@
           <em>Nasathi Vidya Samam Mithram: there is no friend equal to knowledge.</em>
         </div>
         <div class="hero__cta">
-          <a class="btn btn--gold" href="#events">Upcoming events</a>
-          <a class="btn btn--ghost" href="#about">About our school</a>
+          <a class="btn btn--gold" href="events.html">Upcoming events</a>
+          <a class="btn btn--ghost" href="overview.html">About our school</a>
         </div>
       </div>
       <img class="hero__seal" src="assets/logo-color.webp" alt="Crest of Thelijjawila Central College">
@@ -90,17 +64,13 @@
   <section class="block" id="about">
     <div class="wrap about">
       <div>
-        <div class="sec-head">
-          <span class="eyebrow">About us</span>
-          <h2>A home of learning for Thelijjawila</h2>
-          </div>
+      <div class="sec-head">
+        <span class="eyebrow">About us</span>
+        <h2>A home of learning for Thelijjawila</h2>
+      </div>
         <p>Thelijjawila Central College is a mixed national school for boys and girls in Thelijjawila, Matara, in the Southern Province. It stands on a hillock at Udukawa facing the paddy fields, close to the Weligama–Akuressa main road. More than 2,500 students in Grades 6 to 13 learn here in Sinhala and English, guided by 130 teachers.</p>
         <p>The college was founded in 1946 as a Buddhist school under the education-for-villages scheme of Dr. C. W. W. Kannangara, the Father of Free Education, with the support of David Wanigasekara and Ven. Naranda Thero of Wajiraramaya, Bambalapitiya. It was declared a national school on 31 January 1996.</p>
-        <p>Our crest carries the pun kalasaya, the Dharma Chakra, the oil lamp and the open books, which stand for prosperity, wisdom and the light of education that our motto speaks of. The school colours are maroon and gold.</p>
-        <div class="vm">
-          <div><h3>Vision</h3><p>To be a centre of excellence that produces disciplined, knowledgeable and caring citizens for Sri Lanka.</p></div>
-          <div><h3>Mission</h3><p>To give every child a quality education, develop their talents and values, and prepare them to face the future with confidence.</p></div>
-        </div>
+        <p class="more-link"><a class="btn btn--line" href="overview.html">Read more about us</a> <a class="btn btn--line" href="history.html">Our history</a></p>
       </div>
       <aside class="principal">
         <span class="eyebrow" style="color:var(--maroon)">Our principal</span>
@@ -108,127 +78,12 @@
           <img class="principal-photo" src="assets/principal.webp" alt="J. Uyangoda, Principal" width="480" height="552">
           <div><strong>J. Uyangoda</strong><small>25th Principal, since 2024</small></div>
         </div>
-        <!-- Replace this paragraph with the principal's own message -->
-        <p style="margin-top:16px;color:var(--muted)">A welcome message from the principal will appear here.</p>
+        <p class="more-link" style="text-align:center"><a href="principals.html">Read the principal's message</a></p>
       </aside>
-
-    <div class="org" lang="si">
-      <div class="sec-head" style="margin-top:32px">
-        <span class="eyebrow">School management</span>
-        <h2>පාසල් කළමනාකරණ ව්‍යුහය</h2>
-      </div>
-      <!-- Management structure: edit names of roles here -->
-      <div class="org-tier org-t1"><div class="org-box side"><strong>පාසල් සංවර්ධන සමිතිය</strong></div><div class="org-box top"><strong>විදුහල්පති</strong></div><div class="org-box side"><strong>ආදි ශිෂ්‍ය සංගමය</strong></div></div>
-      <div class="org-tier org-t2"><div class="org-box "><strong>නියෝජ්‍ය විදුහල්පති</strong><small>පාලන කටයුතු</small></div><div class="org-box "><strong>නියෝජ්‍ය විදුහල්පති</strong><small>සංවර්ධන කටයුතු</small></div><div class="org-box "><strong>නියෝජ්‍ය විදුහල්පති</strong><small>විෂය සමගාමී හා බාහිර කටයුතු</small></div></div>
-      <div class="org-tier org-t3"><div class="org-box "><strong>සහකාර විදුහල්පති</strong><small>අ.පො.ස. උසස් පෙළ</small></div><div class="org-box "><strong>සහකාර විදුහල්පති</strong><small>ජ්‍යෙෂ්ඨ ද්විතීයික 9, 10, 11</small></div><div class="org-box "><strong>සහකාර විදුහල්පති</strong><small>කනිෂ්ඨ ද්විතීයික 6, 7, 8</small></div><div class="org-box "><strong>සහකාර විදුහල්පති</strong><small>මූල්‍ය කටයුතු</small></div><div class="org-box "><strong>සහකාර විදුහල්පති</strong><small>විෂය සමගාමී හා බාහිර කටයුතු</small></div></div>
-      <div class="org-tier org-t4"><div class="org-box "><strong>අංශ ප්‍රධානීන් (උසස් පෙළ)</strong><small>විද්‍යා අංශය<br>වාණිජ අංශය<br>කලා අංශය</small></div><div class="org-box "><strong>ශ්‍රේණි ප්‍රධානීන්</strong><small>9 ශ්‍රේණිය<br>10 ශ්‍රේණිය<br>11 ශ්‍රේණිය</small></div><div class="org-box "><strong>ශ්‍රේණි ප්‍රධානීන්</strong><small>6 ශ්‍රේණිය<br>7 ශ්‍රේණිය<br>8 ශ්‍රේණිය</small></div><div class="org-box "><strong>විෂය ප්‍රධානීන්</strong><small>බුද්ධාගම, සිංහල, ඉංග්‍රීසි, විද්‍යාව, ගණිතය, ඉතිහාසය, I කාණ්ඩ විෂයන්, II කාණ්ඩ විෂයන්, III කාණ්ඩ විෂයන්, ද්විභාෂා</small></div><div class="org-box "><strong>විනය ප්‍රධානීන්</strong></div></div>
-    </div>
     </div>
   </section>
 
-  <section class="block alt" id="history">
-    <div class="wrap">
-      <div class="sec-head">
-        <span class="eyebrow">Our history</span>
-        <h2>From a thatched hut to a national school</h2>
-      </div>
-      <div class="history">
-        <ol class="timeline">
-          <li><time>17 Jan 1946</time><p>Classes begin at Telijjawila junction in a small coconut-thatched building, with nearly 200 students and three teachers. The pioneer teachers were D. H. Wickramasekara and U. A. Podinona, and the first principal was H. L. Wimalasuriya from Gnanodaya Maha Vidyalaya, Kalutara.</p></li>
-          <li><time>Early years</time><p>Wickramaratne Walawwa serves as the boys' hostel and Samarasinghe Walawwa in Bibugodella watta as the girls' hostel. Lessons are taught in English until 1956.</p></li>
-          <li><time>1948 – 1955</time><p>The school moves to its present home on the hillock at Udukawa, with an assembly hall, classrooms, administrative blocks, craft rooms and two hostel blocks.</p></li>
-          <li><time>15 Jul 1955</time><p>Prime Minister Sir John Kotelawala formally declares the school open, during the time of principal R. B. Gallella.</p></li>
-          <li><time>31 Jan 1996</time><p>Thelijjawila Central College is declared a national school.</p></li>
-          <li><time>Today</time><p>Over 2,500 students and 130 teachers, with four houses: Rohana, Thissa, Anura and Vijitha.</p></li>
-        </ol>
-        <div class="side">
-          <div class="houses" aria-label="School houses">
-            <span class="eyebrow" style="color:var(--maroon)">Our four houses</span>
-            <!-- House colours: change the --house value on each line -->
-            <div><span style="--house:#c62828">Rohana</span><span style="--house:#1565c0">Thissa</span><span style="--house:#2e7d32">Anura</span><span style="--house:#f9a825">Vijitha</span></div>
-          </div>
-        </div>
-      </div>
-      <div class="principals">
-        <h3>Principals since 1946</h3>
-        <!-- To add a photo: put a 144x180 image in assets/principals/ and swap the <span class="pp-ph"> for an <img> -->
-        <ol class="pp-grid">
-          <li><img src="assets/principals/wimalasooriya.webp" alt="H. L. Wimalasooriya" width="144" height="180" loading="lazy"><strong>H. L. Wimalasooriya</strong><time>1946 – 1948</time></li>
-          <li><span class="pp-ph" aria-hidden="true">EG</span><strong>Edmond Dias Gunarathne</strong><time>1948 – 1949</time></li>
-          <li><span class="pp-ph" aria-hidden="true">MS</span><strong>M. A. de Silva</strong><time>1949 – 1951</time></li>
-          <li><span class="pp-ph" aria-hidden="true">GT</span><strong>G. Tanthirigoda (acting)</strong><time>1951</time></li>
-          <li><img src="assets/principals/rathnapala.webp" alt="H. L. Rathnapala" width="144" height="180" loading="lazy"><strong>H. L. Rathnapala</strong><time>1951 – 1952</time></li>
-          <li><img src="assets/principals/wedage.webp" alt="D. A. Wedage" width="144" height="180" loading="lazy"><strong>D. A. Wedage</strong><time>1952 – 1955</time></li>
-          <li><img src="assets/principals/gallella.webp" alt="R. B. Gallella" width="144" height="180" loading="lazy"><strong>R. B. Gallella</strong><time>1955 – 1957</time></li>
-          <li><span class="pp-ph" aria-hidden="true">LS</span><strong>L. H. P. De Silva</strong><time>1957 – 1968</time></li>
-          <li><img src="assets/principals/dharmasiri.webp" alt="U. A. F. Dharmasiri" width="144" height="180" loading="lazy"><strong>U. A. F. Dharmasiri</strong><time>1968 – 1970</time></li>
-          <li><img src="assets/principals/samarasekara.webp" alt="N. G. K. Samarasekara" width="144" height="180" loading="lazy"><strong>N. G. K. Samarasekara</strong><time>1970 – 1973</time></li>
-          <li><span class="pp-ph" aria-hidden="true">RM</span><strong>R. A. Mathos</strong><time>1973 – 1975</time></li>
-          <li><span class="pp-ph" aria-hidden="true">NG</span><strong>N. A. Gunadasa</strong><time>1975 – 1977</time></li>
-          <li><img src="assets/principals/waidyarathna.webp" alt="C. K. Waidyarathna" width="144" height="180" loading="lazy"><strong>C. K. Waidyarathna</strong><time>1977 – 1980</time></li>
-          <li><span class="pp-ph" aria-hidden="true">PW</span><strong>P. V. P. Wickramasingha</strong><time>1980 – 1981</time></li>
-          <li><img src="assets/principals/sirisena.webp" alt="M. K. Sirisena" width="144" height="180" loading="lazy"><strong>M. K. Sirisena</strong><time>1981 – 1986</time></li>
-          <li><img src="assets/principals/jayawardana.webp" alt="N. Jayawardana" width="144" height="180" loading="lazy"><strong>N. Jayawardana</strong><time>1986 – 1988</time></li>
-          <li><img src="assets/principals/jayaweera.webp" alt="J. P. P. Jayaweera" width="144" height="180" loading="lazy"><strong>J. P. P. Jayaweera</strong><time>1988</time></li>
-          <li><span class="pp-ph" aria-hidden="true">AG</span><strong>A. Gamage</strong><time>1988 – 1992</time></li>
-          <li><img src="assets/principals/wijewantha.webp" alt="I. Wijewantha" width="144" height="180" loading="lazy"><strong>I. Wijewantha</strong><time>1992 – 1993</time></li>
-          <li><span class="pp-ph" aria-hidden="true">WC</span><strong>W. Chittananda</strong><time>1993 – 1994</time></li>
-          <li><span class="pp-ph" aria-hidden="true">PW</span><strong>P. V. P. Wickramasingha</strong><time>1994 – 2002</time></li>
-          <li><span class="pp-ph" aria-hidden="true">CG</span><strong>Cyril T. Gunawardana</strong><time>2003 – 2004</time></li>
-          <li><span class="pp-ph" aria-hidden="true">RD</span><strong>Rohana Deraniyagala</strong><time>2004 – 2006</time></li>
-          <li><span class="pp-ph" aria-hidden="true">WV</span><strong>Wimal Vidanapathirana</strong><time>2006 – 2017</time></li>
-          <li><img src="assets/principals/meegoda.webp" alt="Jayantha Meegoda" width="144" height="180" loading="lazy"><strong>Jayantha Meegoda</strong><time>2017 – 2024</time></li>
-          <li><img src="assets/principals/uyangoda.webp" alt="J. Uyangoda" width="144" height="180" loading="lazy"><strong>J. Uyangoda</strong><time>2024 – present</time></li>
-        </ol>
-      </div>
-    </div>
-  </section>
-
-  <section class="block" id="academics">
-    <div class="wrap">
-      <div class="sec-head">
-        <span class="eyebrow">Academics</span>
-        <h2>From Grade 6 to university</h2>
-      </div>
-      <div class="grades">
-        <div class="grade"><span class="range">Grades 6 – 9</span><h3>Junior Secondary</h3><p>A broad curriculum with languages, science, ICT, aesthetics and practical and technical skills.</p></div>
-        <div class="grade"><span class="range">Grades 10 – 11</span><h3>G.C.E. O/L</h3><p>Focused preparation for the Ordinary Level exam with seminars, model papers and extra classes.</p></div>
-        <div class="grade"><span class="range">Grades 12 – 13</span><h3>G.C.E. A/L</h3><p>Advanced Level studies in four streams.</p>
-          <div class="streams"><span>Science</span><span>Commerce</span><span>Arts</span><span>Technology</span></div></div>
-      </div>
-      <div class="clubs" aria-label="Clubs and societies">
-        <span>Scouts</span><span>Cadet Corps</span><span>Prefects' Guild</span><span>Science Society</span><span>ICT Society</span><span>Buddhist Society</span><span>Eastern Music Society</span><span>Sinhala Literary Society</span><span>English Literary Society</span><span>Media Unit</span><span>Environmental Pioneers</span><span>Sports Club</span>
-      </div>
-    </div>
-  </section>
-
-  <section class="block alt" id="events">
-    <div class="wrap">
-      <div class="sec-head">
-        <span class="eyebrow">School events</span>
-        <h2>What's happening at Thelijjawila</h2>
-        <p>Tap any event to see the full programme, venue and who to contact. Events are added by the school through the admin page.</p>
-      </div>
-      <div class="ev-tools">
-        <div class="chips" id="catChips">
-          <button class="chip" data-cat="All" aria-pressed="true">All</button>
-          <button class="chip" data-cat="Academic" aria-pressed="false">Academic</button>
-          <button class="chip" data-cat="Sports" aria-pressed="false">Sports</button>
-          <button class="chip" data-cat="Cultural" aria-pressed="false">Cultural</button>
-          <button class="chip" data-cat="Religious" aria-pressed="false">Religious</button>
-          <button class="chip" data-cat="Community" aria-pressed="false">Community</button>
-        </div>
-        <div class="seg" id="whenSeg">
-          <button data-when="upcoming" aria-pressed="true">Upcoming</button>
-          <button data-when="past" aria-pressed="false">Past events</button>
-        </div>
-      </div>
-      <div class="events" id="eventList"></div>
-    </div>
-  </section>
-
-  <!-- NEWS FROM FACEBOOK: posts come from data/posts.json, which scripts/fetch-facebook.mjs refreshes automatically (see SETUP-FACEBOOK.md) -->
-  <section class="block" id="news">
+  <section class="block alt" id="news">
     <div class="wrap">
       <div class="sec-head">
         <span class="eyebrow">News from Facebook</span>
@@ -241,7 +96,7 @@
     </div>
   </section>
 
-  <section class="block alt" id="achievements">
+  <section class="block" id="achievements">
     <div class="wrap">
       <div class="sec-head">
         <span class="eyebrow">Achievements</span>
@@ -255,36 +110,14 @@
     </div>
   </section>
 
-  <!-- GALLERY: filled automatically with the newest photos from the school Facebook page -->
-  <section class="block" id="gallery">
-    <div class="wrap">
-      <div class="sec-head">
-        <span class="eyebrow">Gallery</span>
-        <h2>Life at school</h2>
-      </div>
-      <div class="gallery" id="galleryGrid">
-        <figure><figcaption>Annual Prize Giving</figcaption></figure>
-        <figure><figcaption>Inter-House Sports Meet</figcaption></figure>
-        <figure><figcaption>Vesak Celebrations</figcaption></figure>
-        <figure><figcaption>Science Day</figcaption></figure>
-        <figure><figcaption>Cadet Corps</figcaption></figure>
-        <figure><figcaption>Avurudu Festival</figcaption></figure>
-        <figure><figcaption>Teachers' Day</figcaption></figure>
-      </div>
-    </div>
-  </section>
-
   <section class="block alt" id="notices">
     <div class="wrap">
       <div class="sec-head">
         <span class="eyebrow">Notices</span>
         <h2>Announcements for parents and students</h2>
       </div>
-      <div class="notices">
-        <div class="notice"><time datetime="2026-10-14">14 Oct 2026</time><span>Third term test timetable for Grades 6 – 11 has been released. Copies are available from class teachers.</span><span class="tag">Exams</span></div>
-        <div class="notice"><time datetime="2026-10-10">10 Oct 2026</time><span>Grade 6 admissions for 2027 based on the Grade 5 Scholarship results: the list will be displayed on the school notice board.</span><span class="tag">Admissions</span></div>
-        <div class="notice"><time datetime="2026-10-02">02 Oct 2026</time><span>Parent–teacher meeting for Grade 11 on Saturday, 31 October at 9:00 AM in the Main Hall.</span><span class="tag">Parents</span></div>
-      </div>
+      <div class="notices" id="noticeList" data-limit="4"></div>
+      <p class="more-link"><a class="btn btn--line" href="notices.html">Open the notice board</a></p>
     </div>
   </section>
 
@@ -315,21 +148,6 @@
     </div>
   </section>
 </main>
-
-<footer class="footer">
-  <div class="wrap">
-    <img src="assets/logo-color.webp" alt="">
-    <span class="si">නාසති විද්‍යා සමං මිත්‍රම්</span>
-    <small>National School since 1996 · Founded 1946</small>
-    <div class="footer-social">
-      <a href="https://www.facebook.com/thelijjawilacentralcollege" target="_blank" rel="noopener">Facebook</a>
-      <a href="https://www.youtube.com/@ThelijjawilaCentralCollege" target="_blank" rel="noopener">YouTube</a>
-    </div>
-    <small>© <span id="year">2026</span> MR/ Thelijjawila Central College WEB DEVELOPMENT UNIT. All rights reserved. · <a href="admin.html">Admin</a></small>
-  </div>
-</footer>
-
-<dialog class="ev-dialog" id="eventDialog" aria-label="Event details"></dialog>
 
 <script src="js/main.js"></script>
 </body>

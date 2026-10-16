@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Notice Board · Thelijjawila Central College</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Official website of MR/ Thelijjawila Central College, Sri Lanka. නාසති විද්‍යා සමං මිත්‍රම්">
+<link rel="icon" href="assets/logo-color.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Marcellus&family=Noto+Serif+Sinhala:wght@400;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="notices">
+<script src="js/layout.js" defer></script>
+
+<main>
+  <section class="page-hero">
+    <div class="wrap">
+      <p class="crumbs"><a href="index.html">Home</a> / Notice Board</p>
+      <span class="eyebrow">Announcements</span>
+      <h1>Notice Board</h1>
+      <p>Notices for students and parents, by grade. Added by the school on the admin page.</p>
+    </div>
+  </section>
+  <section class="block">
+    <div class="wrap">
+      <div class="chips tabs" id="noticeTabs">
+        <button class="chip" data-grade="all" aria-pressed="true">All</button>
+        <button class="chip" data-grade="6-9" aria-pressed="false">Grades 6 – 9</button>
+        <button class="chip" data-grade="10-11" aria-pressed="false">Grades 10 – 11</button>
+        <button class="chip" data-grade="12-13" aria-pressed="false">Grades 12 – 13</button>
+      </div>
+      <div class="notices" id="noticeList"></div>
+    </div>
+  </section>
+</main>
+
+<script src="js/main.js"></script>
+</body>
+</html>
