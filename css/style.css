@@ -168,7 +168,7 @@ section.block { padding-block: clamp(56px, 8vw, 96px); }
 }
 .alt a { color: var(--gold-soft); }
 /* white cards keep dark text inside maroon bands */
-.alt .ev, .alt .chip, .alt .seg, .alt .houses div span, .alt .principals, .alt .grade, .alt .post, .alt .empty, .alt .notice .tag {
+.alt .ev, .alt .chip, .alt .seg, .alt .houses div span, .alt .pp-grid li, .alt .grade, .alt .post, .alt .empty, .alt .notice .tag {
   --ink: #2b1315; --muted: #6e5754; --line: #eadfd9; --maroon: #7e1a1e; --chip: #f6ece7;
   color: var(--ink);
 }
@@ -186,7 +186,6 @@ section.block { padding-block: clamp(56px, 8vw, 96px); }
 .clubs span { border: 1px solid var(--line); background: var(--card); border-radius: 99px; padding: 6px 14px; font-size: .9rem; }
 @media (max-width: 520px) { .grades { grid-template-columns: 1fr; } }
 
-.alumni { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); display: grid; gap: 4px; }
 
 /* History */
 .history { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 40px; align-items: start; }
@@ -198,11 +197,15 @@ section.block { padding-block: clamp(56px, 8vw, 96px); }
 .side { display: grid; gap: 18px; }
 .houses div { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin-top: 10px; }
 .houses div span { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; text-align: center; font-family: var(--f-display); font-size: 1.15rem; }
-.principals { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; }
-.principals summary { cursor: pointer; font-weight: 600; color: var(--maroon); }
-.principals ol { margin: 12px 0 0; padding-left: 26px; display: grid; gap: 4px; font-size: .9rem; max-height: 340px; overflow-y: auto; }
-.principals li span { display: inline-block; min-width: 0; }
-.principals li time { float: right; color: var(--muted); font-variant-numeric: tabular-nums; padding-right: 6px; }
+.principals { margin-top: 48px; }
+.principals h3 { font-family: var(--f-display); font-size: 1.6rem; color: #fff; margin: 0 0 18px; text-align: center; }
+.pp-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; }
+.pp-grid li { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; text-align: center; display: grid; gap: 4px; justify-items: center; align-content: start; }
+.pp-grid img, .pp-ph { width: 100%; max-width: 120px; aspect-ratio: 4 / 5; height: auto; object-fit: cover; border-radius: 8px; border: 2px solid var(--gold); margin-bottom: 6px; }
+.pp-ph { display: grid; place-items: center; background: var(--chip); color: var(--maroon); font-family: var(--f-display); font-size: 1.8rem; }
+.pp-grid strong { font-size: .9rem; line-height: 1.25; color: var(--ink); }
+.pp-grid time { font-size: .8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) { .pp-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; } .pp-grid li { padding: 8px 6px; } .pp-grid strong { font-size: .78rem; } .pp-grid time { font-size: .72rem; } .pp-ph { font-size: 1.3rem; } }
 @media (max-width: 800px) { .history { grid-template-columns: 1fr; } .grades { grid-template-columns: 1fr; } }
 
 /* Events */
@@ -315,7 +318,8 @@ dialog.ev-dialog::backdrop { background: rgba(30,5,7,.55); backdrop-filter: blur
 }
 
 /* Principal photo */
-.who--photo { flex-direction: column; align-items: flex-start; }
+.who--photo { flex-direction: column; align-items: center; text-align: center; }
+.who--photo strong, .who--photo small { display: block; }
 .principal-photo { width: 100%; max-width: 260px; height: auto; aspect-ratio: 480 / 552; object-fit: cover; border-radius: 12px; border: 3px solid var(--gold); }
 
 /* House colours */
