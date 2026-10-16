@@ -21,13 +21,20 @@ console.log(`Token length ${TOKEN.length}, starts with "EAA": ${TOKEN.startsWith
 
 const rules = JSON.parse(await readFile(new URL("data/categories.json", root), "utf8"));
 
+// English keywords match whole words; Sinhala keywords match anywhere in the text
+function matches(text, k) {
+  if (!/^[\x00-\x7f]+$/.test(k)) return text.includes(k);
+  const esc = k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`).test(text);
+}
+
 function categorise(text) {
   const t = (text || "").toLowerCase();
   for (const [tag, cat] of Object.entries(rules.hashtags)) {
     if (!tag.startsWith("_") && t.includes(tag)) return cat;
   }
   for (const c of rules.categories) {
-    if (c.keywords.some((k) => t.includes(k.toLowerCase()))) return c.name;
+    if (c.keywords.some((k) => matches(t, k.toLowerCase().trim()))) return c.name;
   }
   return "General";
 }

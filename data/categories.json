@@ -1,16 +1,159 @@
 {
-  "_help": "Each post gets the FIRST category whose keywords appear in its text (English or Sinhala, not case sensitive). Posts that match nothing go to 'General'. Add or change keywords freely.",
+  "_help": "Each post gets the FIRST category whose keywords appear in its text. English keywords match whole words only; Sinhala keywords match anywhere. Posts that match nothing go to 'General'.",
   "categories": [
-    { "name": "Achievements", "keywords": ["congratulations", "congrats", "winner", "won ", "champion", "1st place", "first place", "gold medal", "silver", "bronze", "selected", "සුබ පැතුම්", "ජයග්‍රහණ", "ප්‍රථම ස්ථානය", "ශූරතාව", "තේරී"] },
-    { "name": "Sports", "keywords": ["sports", "cricket", "volleyball", "netball", "football", "athletic", "meet", "tournament", "match", "ක්‍රීඩා", "ක්‍රිකට්", "වොලිබෝල්", "දැල්පන්දු", "මලල"] },
-    { "name": "Religious", "keywords": ["vesak", "poson", "kathina", "pinkama", "bodhi", "dhamma", "pirith", "dansal", "වෙසක්", "පොසොන්", "කඨින", "පින්කම", "පිරිත්", "බෝධි", "දන්සල"] },
-    { "name": "Academic", "keywords": ["exam", "o/l", "a/l", "scholarship", "seminar", "results", "science", "workshop", "විභාග", "ශිෂ්‍යත්ව", "සම්මන්ත්‍රණ", "ප්‍රතිඵල", "සාමාන්‍ය පෙළ", "උසස් පෙළ"] },
-    { "name": "Events", "keywords": ["celebration", "day", "festival", "ceremony", "prize giving", "concert", "avurudu", "exhibition", "උත්සව", "දිනය", "ත්‍යාග", "අවුරුදු", "ප්‍රදර්ශන", "සැමරුම"] },
-    { "name": "Notices", "keywords": ["notice", "announcement", "parents", "meeting", "admission", "holiday", "දැන්වීම", "නිවේදන", "දෙමාපිය", "රැස්වීම", "ඇතුළත් කිරීම", "නිවාඩු"] }
+    {
+      "name": "Achievements",
+      "keywords": [
+        "congratulations",
+        "congrats",
+        "winner",
+        "won ",
+        "champion",
+        "1st place",
+        "first place",
+        "gold medal",
+        "silver",
+        "bronze",
+        "selected",
+        "සුබ පැතුම්",
+        "ජයග්‍රහණ",
+        "ප්‍රථම ස්ථානය",
+        "ශූරතාව",
+        "තේරී"
+      ]
+    },
+    {
+      "name": "Sports",
+      "keywords": [
+        "sports",
+        "cricket",
+        "volleyball",
+        "netball",
+        "football",
+        "athletic",
+        "tournament",
+        "match",
+        "ක්‍රීඩා",
+        "ක්‍රිකට්",
+        "වොලිබෝල්",
+        "දැල්පන්දු",
+        "මලල",
+        "sports meet",
+        "big match",
+        "කබඩි",
+        "පාපන්දු"
+      ]
+    },
+    {
+      "name": "Religious",
+      "keywords": [
+        "vesak",
+        "poson",
+        "kathina",
+        "pinkama",
+        "bodhi",
+        "dhamma",
+        "pirith",
+        "dansal",
+        "වෙසක්",
+        "පොසොන්",
+        "කඨින",
+        "පින්කම",
+        "පිරිත්",
+        "බෝධි",
+        "දන්සල"
+      ]
+    },
+    {
+      "name": "Academic",
+      "keywords": [
+        "exam",
+        "o/l",
+        "a/l",
+        "scholarship",
+        "seminar",
+        "results",
+        "science",
+        "workshop",
+        "විභාග",
+        "ශිෂ්‍යත්ව",
+        "සම්මන්ත්‍රණ",
+        "ප්‍රතිඵල",
+        "සාමාන්‍ය පෙළ",
+        "උසස් පෙළ"
+      ]
+    },
+    {
+      "name": "Aesthetics",
+      "keywords": [
+        "music",
+        "musical",
+        "song",
+        "dance",
+        "drama",
+        "art ",
+        "concert",
+        "instrumental",
+        "orchestra",
+        "band",
+        "සංගීත",
+        "ගීත",
+        "නර්තන",
+        "නාට්‍ය",
+        "චිත්‍ර",
+        "වාදන",
+        "ගැයෙන"
+      ]
+    },
+    {
+      "name": "Events",
+      "keywords": [
+        "celebration",
+        "festival",
+        "ceremony",
+        "prize giving",
+        "avurudu",
+        "exhibition",
+        "උත්සව",
+        "දිනය",
+        "ත්‍යාග",
+        "අවුරුදු",
+        "ප්‍රදර්ශන",
+        "සැමරුම",
+        "teachers' day",
+        "children's day",
+        "ගුරු දින",
+        "ළමා දින"
+      ]
+    },
+    {
+      "name": "Notices",
+      "keywords": [
+        "notice",
+        "announcement",
+        "parents",
+        "meeting",
+        "admission",
+        "holiday",
+        "දැන්වීම",
+        "නිවේදන",
+        "දෙමාපිය",
+        "රැස්වීම",
+        "ඇතුළත් කිරීම",
+        "නිවාඩු"
+      ]
+    }
   ],
   "hashtags": {
     "_help": "A hashtag in the post always wins over keywords, e.g. #Sports or #Events",
-    "#achievements": "Achievements", "#sports": "Sports", "#religious": "Religious",
-    "#academic": "Academic", "#events": "Events", "#notice": "Notices", "#notices": "Notices"
+    "#achievements": "Achievements",
+    "#sports": "Sports",
+    "#religious": "Religious",
+    "#academic": "Academic",
+    "#events": "Events",
+    "#notice": "Notices",
+    "#notices": "Notices",
+    "#aesthetics": "Aesthetics",
+    "#music": "Aesthetics"
   }
 }
