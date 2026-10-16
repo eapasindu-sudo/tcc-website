@@ -1,91 +1,7 @@
-/* =====================================================================
-   SCHOOL EVENTS — edit this list to add, change or remove events.
-   date: "YYYY-MM-DD"  ·  category: Academic | Sports | Cultural | Religious | Community
-   Events before today automatically move to "Past events".
-   ===================================================================== */
-const EVENTS = [
-  {
-    title: "Annual Kathina Pinkama",
-    date: "2026-10-25", time: "6:30 AM – 12:00 PM", venue: "School Dhamma Hall",
-    category: "Religious",
-    summary: "The school community offers the Kathina robe to the Maha Sangha with a perahera from the school gate.",
-    details: "Students, teachers, parents and past pupils join together for the annual Kathina ceremony. The Kathina perahera starts from the main gate and goes to the Dhamma Hall, followed by the robe offering and a dana for the Maha Sangha.",
-    schedule: [["6:30 AM", "Gathering at the main gate"], ["7:00 AM", "Kathina perahera"], ["8:30 AM", "Robe offering and anumodana"], ["11:00 AM", "Dana"]],
-    who: "All students, parents and well-wishers", contact: "Buddhist Society teacher-in-charge"
-  },
-  {
-    title: "Science Day Exhibition",
-    date: "2026-11-06", time: "8:30 AM – 3:00 PM", venue: "Science Labs & Main Hall",
-    category: "Academic",
-    summary: "Student projects, live experiments and a robotics corner, open to nearby schools and parents.",
-    details: "Grade 6 to 13 students present science and technology projects. Highlights include a robotics corner by the ICT Society, chemistry demonstrations and the best-project awards for each grade.",
-    schedule: [["8:30 AM", "Opening ceremony"], ["9:00 AM", "Exhibition opens to visitors"], ["1:30 PM", "Judging of projects"], ["2:30 PM", "Awards"]],
-    who: "Open to parents and invited schools", contact: "Science Society"
-  },
-  {
-    title: "G.C.E. O/L Final Seminar",
-    date: "2026-11-21", time: "8:00 AM – 1:00 PM", venue: "Main Hall",
-    category: "Academic",
-    summary: "Final revision seminar for Grade 11 students covering Mathematics, Science and English.",
-    details: "A free revision day led by subject teachers and invited resource persons. Model papers will be handed out. Students should bring their own stationery and a calculator.",
-    schedule: [["8:00 AM", "Mathematics"], ["9:45 AM", "Science"], ["11:30 AM", "English"]],
-    who: "Grade 11 students", contact: "Grade 11 sectional head"
-  },
-  {
-    title: "Annual Prize Giving 2026",
-    date: "2026-12-05", time: "9:00 AM – 1:00 PM", venue: "Main Hall",
-    category: "Academic",
-    summary: "Celebrating academic, sports and co-curricular achievements of the year.",
-    details: "Prizes are awarded to the top students of each grade, the best O/L and A/L results, sports colours and outstanding service. Parents of prize winners are invited.",
-    schedule: [["9:00 AM", "Arrival of chief guest"], ["9:30 AM", "Principal's report"], ["10:00 AM", "Prize distribution"], ["12:30 PM", "Vote of thanks"]],
-    who: "Prize winners and their parents", contact: "School office"
-  },
-  {
-    title: "Past Pupils' Blood Donation Campaign",
-    date: "2026-12-19", time: "8:00 AM – 2:00 PM", venue: "School Auditorium",
-    category: "Community",
-    summary: "Organised by the Old Boys' and Girls' Association with the regional blood bank.",
-    details: "Donors aged 18 to 60 and weighing over 50 kg are welcome. Please have a good breakfast and bring your NIC.",
-    schedule: [["8:00 AM", "Registration"], ["8:30 AM", "Donations begin"]],
-    who: "Past pupils, parents and the public", contact: "OBA secretary"
-  },
-  {
-    title: "Inter-House Sports Meet",
-    date: "2027-02-13", time: "1:00 PM onwards", venue: "School Grounds",
-    category: "Sports",
-    summary: "Track and field finals, march past and the house relay, with the prize giving at the end.",
-    details: "The four houses, Rohana, Thissa, Anura and Vijitha, compete in track and field events. Heats are held during the week before. Parents are welcome to watch the finals.",
-    schedule: [["1:00 PM", "March past"], ["1:30 PM", "Track and field finals"], ["5:00 PM", "House relays"], ["5:45 PM", "Awards and closing"]],
-    who: "All students and parents", contact: "Sports coordinator"
-  },
-  {
-    title: "Sinhala & Tamil New Year Festival",
-    date: "2027-04-08", time: "8:00 AM – 1:00 PM", venue: "School Grounds",
-    category: "Cultural",
-    summary: "Avurudu games, kavum and kokis, the Avurudu Kumara and Kumariya contest and more.",
-    details: "Traditional games such as kana mutti, olinda keliya, kotta pora and lissana gaha. Students are encouraged to come in traditional dress.",
-    schedule: [["8:00 AM", "Auspicious opening"], ["8:30 AM", "Traditional games"], ["11:00 AM", "Avurudu Kumara & Kumariya"]],
-    who: "All students and teachers", contact: "Cultural Society"
-  },
-  {
-    title: "Teachers' Day Celebration",
-    date: "2026-10-06", time: "8:00 AM – 12:00 PM", venue: "Main Hall",
-    category: "Cultural",
-    summary: "Students honoured their teachers with a special assembly, songs and a drama.",
-    details: "Organised by the Prefects' Guild. The programme included a guru vandana, a musical item by the Eastern Music Society and a short drama by Grade 12 students.",
-    schedule: [["8:00 AM", "Special assembly"], ["9:00 AM", "Cultural programme"]],
-    who: "All students and staff", contact: "Prefects' Guild"
-  },
-  {
-    title: "Literary Day (Sahithya Dinaya)",
-    date: "2026-09-18", time: "8:30 AM – 1:30 PM", venue: "Main Hall",
-    category: "Cultural",
-    summary: "Poetry, speech, drama and essay winners of the school Sahithya competitions performed on stage.",
-    details: "Winners of the school level Sinhala and English literary competitions performed and received certificates.",
-    schedule: [["8:30 AM", "Opening"], ["9:00 AM", "Performances"], ["12:30 PM", "Certificates"]],
-    who: "All students", contact: "Sinhala Literary Society"
-  }
-];
+/* School events are managed on the admin page (admin.html) and saved in data/events.json.
+   Event fields: title, date ("YYYY-MM-DD"), time, venue, category, summary, details,
+   schedule ([["8:00 AM", "Opening"], ...]), who, contact. Past events move to "Past events" automatically. */
+let EVENTS = [];
 
 /* ---------- Loading screen ---------- */
 const loader = document.getElementById("loader");
@@ -140,7 +56,7 @@ function render() {
         <button class="more" data-i="${e.i}">View details</button>
       </div>
     </article>`).join("")
-    : `<p class="empty">No ${state.when} events in this category.</p>`;
+    : `<p class="empty">${EVENTS.length ? `No ${state.when} events in this category.` : "No events have been announced yet. Follow our Facebook page for the latest news."}</p>`;
 }
 
 function openEvent(i) {
@@ -157,11 +73,11 @@ function openEvent(i) {
         <div><small>Date</small>${esc(longDate)}</div>
         <div><small>Time</small>${esc(e.time)}</div>
         <div><small>Venue</small>${esc(e.venue)}</div>
-        <div><small>Who can attend</small>${esc(e.who)}</div>
+        ${e.who ? `<div><small>Who can attend</small>${esc(e.who)}</div>` : ""}
       </div>
-      <p>${esc(e.details)}</p>
+      ${e.details ? `<p style="white-space:pre-line">${esc(e.details)}</p>` : ""}
       ${e.schedule && e.schedule.length ? `<div><h4>Programme</h4><ul class="sched">${e.schedule.map(([t, s]) => `<li><b>${esc(t)}</b><span>${esc(s)}</span></li>`).join("")}</ul></div>` : ""}
-      <p style="color:var(--muted);font-size:.9rem">For more details contact: <strong>${esc(e.contact)}</strong></p>
+      ${e.contact ? `<p style="color:var(--muted);font-size:.9rem">For more details contact: <strong>${esc(e.contact)}</strong></p>` : ""}
     </div>`;
   dlg.showModal();
   dlg.querySelector(".dlg-close").addEventListener("click", () => dlg.close());
@@ -233,11 +149,26 @@ newsList.addEventListener("click", (e) => {
 });
 newsMore.addEventListener("click", () => { news.shown += 6; renderNews(); });
 
+/* Gallery: newest Facebook photos */
+function renderGallery(posts) {
+  const grid = document.getElementById("galleryGrid");
+  const pics = posts.filter((p) => p.image).slice(0, 7);
+  if (!grid || pics.length < 4) return; // keep the placeholders
+  grid.innerHTML = pics.map((p) => {
+    const cap = (p.text.split("\n").find((l) => l.trim()) || "").replace(/[#@]\S+/g, "").trim();
+    const short = cap.length > 70 ? cap.slice(0, 68) + "…" : cap;
+    return `<figure><a href="${esc(p.link)}" target="_blank" rel="noopener">
+      <img src="${esc(p.image)}" alt="${esc(short)}" loading="lazy">
+      <figcaption>${esc(short)}</figcaption></a></figure>`;
+  }).join("");
+}
+
 function loadNews(data) {
   news.posts = (data.posts || []).slice().sort((a, b) => new Date(b.date) - new Date(a.date));
   const upd = document.getElementById("newsUpdated");
   upd.textContent = data.source === "sample" ? "Showing sample posts" : "Updated " + timeAgo(data.updated);
   renderNews();
+  renderGallery(news.posts);
 }
 fetch("data/posts.json", { cache: "no-cache" })
   .then((r) => (r.ok ? r.json() : Promise.reject()))

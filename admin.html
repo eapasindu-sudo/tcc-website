@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Events Admin · Thelijjawila Central College</title>
+<link rel="icon" href="assets/logo-color.webp">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=Marcellus&display=swap">
+<style>
+  :root { --maroon: #7e1a1e; --deep: #4f0d11; --gold: #e8a417; --ink: #2b1315; --muted: #6e5754; --line: #eadfd9; --chip: #f6ece7; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.6 "Figtree", system-ui, sans-serif; background: #faf6f3; color: var(--ink); }
+  header { background: var(--deep); color: #fff6e6; border-bottom: 3px solid var(--gold); padding: 14px max(16px, env(safe-area-inset-left)); display: flex; gap: 12px; align-items: center; }
+  header img { width: 42px; height: 42px; background: #fff; border-radius: 50%; padding: 2px; }
+  header h1 { font: 400 1.2rem "Marcellus", serif; margin: 0; }
+  header a { margin-left: auto; color: #f7d987; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 60px; display: grid; gap: 22px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+  h2 { font: 400 1.4rem "Marcellus", serif; margin: 0 0 12px; color: var(--maroon); }
+  label { display: grid; gap: 4px; font-weight: 600; font-size: .9rem; }
+  input, select, textarea { font: inherit; padding: 9px 11px; border: 1px solid #d9c8c0; border-radius: 8px; background: #fff; color: var(--ink); width: 100%; }
+  textarea { min-height: 90px; resize: vertical; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .full { grid-column: 1 / -1; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+  button { font: inherit; font-weight: 600; border-radius: 999px; padding: 9px 18px; border: 1.5px solid var(--maroon); background: var(--maroon); color: #fff; cursor: pointer; }
+  button.ghost { background: #fff; color: var(--maroon); }
+  button.danger { background: #fff; color: #b3261e; border-color: #b3261e; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .list { display: grid; gap: 10px; }
+  .item { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: 14px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .item .d { background: var(--maroon); color: #fff; text-align: center; border-radius: 8px; padding: 6px 2px; font-size: .8rem; line-height: 1.2; }
+  .item .d b { display: block; font-size: 1.4rem; font-family: "Marcellus", serif; font-weight: 400; }
+  .item.past .d { background: var(--muted); }
+  .item h3 { margin: 0; font-size: 1.05rem; }
+  .item small { color: var(--muted); }
+  .msg { padding: 10px 14px; border-radius: 10px; font-size: .92rem; }
+  .msg.ok { background: #e7f4ea; color: #1e5b2b; }
+  .msg.err { background: #fbe9e7; color: #8c1d18; }
+  .help { color: var(--muted); font-size: .88rem; }
+  .sched-row { display: grid; grid-template-columns: 120px minmax(0,1fr) auto; gap: 8px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <img src="assets/logo-color.webp" alt="">
+  <h1>Events Admin</h1>
+  <a href="./">View website →</a>
+</header>
+
+<main>
+  <!-- Sign in -->
+  <section class="card" id="loginCard">
+    <h2>Sign in</h2>
+    <p class="help">Paste the school's GitHub access token. It is saved only in this browser. See <strong>ADMIN.md</strong> in the website files for how to create one.</p>
+    <div class="row">
+      <input id="tokenInput" type="password" placeholder="github_pat_..." autocomplete="off" style="flex:1;min-width:220px">
+      <button id="loginBtn">Sign in</button>
+    </div>
+    <p id="loginMsg"></p>
+  </section>
+
+  <div id="app" hidden>
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <span class="help" id="who"></span>
+      <button class="ghost" id="logoutBtn">Sign out</button>
+    </div>
+
+    <!-- Event form -->
+    <section class="card">
+      <h2 id="formTitle">Add an event</h2>
+      <form id="form" class="grid">
+        <label class="full">Event name *<input id="f-title" required></label>
+        <label>Date *<input id="f-date" type="date" required></label>
+        <label>Time<input id="f-time" placeholder="8:00 AM – 1:00 PM"></label>
+        <label>Venue<input id="f-venue" placeholder="Main Hall"></label>
+        <label>Category
+          <select id="f-category">
+            <option>Academic</option><option>Sports</option><option>Cultural</option>
+            <option>Religious</option><option>Community</option>
+          </select>
+        </label>
+        <label class="full">Short description (shown on the card) *<input id="f-summary" required maxlength="200"></label>
+        <label class="full">Full details<textarea id="f-details"></textarea></label>
+        <div class="full">
+          <label style="margin-bottom:6px">Programme (optional)</label>
+          <div id="sched" class="list"></div>
+          <button type="button" class="ghost" id="addSched" style="margin-top:8px">+ Add programme item</button>
+        </div>
+        <label>Who can attend<input id="f-who" placeholder="All students and parents"></label>
+        <label>Contact for details<input id="f-contact" placeholder="School office"></label>
+        <div class="row full">
+          <button type="submit" id="saveBtn">Save event</button>
+          <button type="button" class="ghost" id="cancelBtn" hidden>Cancel editing</button>
+        </div>
+      </form>
+    </section>
+
+    <p id="status"></p>
+
+    <!-- Event list -->
+    <section class="card">
+      <h2>All events</h2>
+      <div class="list" id="list"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const OWNER = "eapasindu-sudo", REPO = "tcc-website", PATH = "data/events.json", BRANCH = "main";
+const API = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${PATH}`;
+const $ = (id) => document.getElementById(id);
+let token = "", events = [], sha = null, editing = -1;
+
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const b64encode = (str) => btoa(String.fromCharCode(...new TextEncoder().encode(str)));
+const b64decode = (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\n/g, "")), (c) => c.charCodeAt(0)));
+const headers = () => ({ Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json" });
+
+function say(el, text, ok) { el.className = "msg " + (ok ? "ok" : "err"); el.textContent = text; }
+
+async function load() {
+  const r = await fetch(`${API}?ref=${BRANCH}&t=${Date.now()}`, { headers: headers() });
+  if (r.status === 401) throw new Error("This token is not valid. Check it and try again.");
+  if (r.status === 404) { events = []; sha = null; return; }
+  if (!r.ok) throw new Error("Could not load events (" + r.status + ").");
+  const j = await r.json();
+  sha = j.sha;
+  const data = JSON.parse(b64decode(j.content) || "[]");
+  events = Array.isArray(data) ? data : (data.events || []);
+}
+
+async function commit(list, message) {
+  // always fetch the latest version before writing
+  const r0 = await fetch(`${API}?ref=${BRANCH}&t=${Date.now()}`, { headers: headers() });
+  sha = r0.ok ? (await r0.json()).sha : null;
+  const sorted = list.slice().sort((a, b) => a.date.localeCompare(b.date));
+  const body = { message, branch: BRANCH, content: b64encode(JSON.stringify(sorted, null, 2) + "\n") };
+  if (sha) body.sha = sha;
+  const r = await fetch(API, { method: "PUT", headers: headers(), body: JSON.stringify(body) });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    throw new Error(r.status === 403 || r.status === 404
+      ? "This token cannot change the website. It needs Contents: Read and write on the tcc-website repository."
+      : (e.message || "Save failed (" + r.status + ")."));
+  }
+  sha = (await r.json()).content.sha;
+  events = sorted;
+}
+
+function renderList() {
+  const today = new Date().toISOString().slice(0, 10);
+  const M = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  $("list").innerHTML = events.length ? events.map((e, i) => {
+    const [y, m, d] = e.date.split("-");
+    return `<div class="item ${e.date < today ? "past" : ""}">
+      <div class="d"><b>${+d}</b>${M[+m - 1]} ${y}</div>
+      <div><h3>${esc(e.title)}</h3><small>${esc(e.category)} · ${esc(e.time || "")} ${e.venue ? "· " + esc(e.venue) : ""}${e.date < today ? " · past" : ""}</small></div>
+      <div class="row"><button class="ghost" data-edit="${i}">Edit</button><button class="danger" data-del="${i}">Delete</button></div>
+    </div>`;
+  }).join("") : `<p class="help">No events yet. Add the first one above.</p>`;
+}
+
+function schedRow(t = "", s = "") {
+  const row = document.createElement("div");
+  row.className = "sched-row";
+  row.innerHTML = `<input placeholder="8:00 AM" value="${esc(t)}"><input placeholder="What happens" value="${esc(s)}"><button type="button" class="danger">✕</button>`;
+  row.querySelector("button").onclick = () => row.remove();
+  $("sched").appendChild(row);
+}
+
+function fillForm(e) {
+  for (const k of ["title", "date", "time", "venue", "category", "summary", "details", "who", "contact"]) $("f-" + k).value = e?.[k] || (k === "category" ? "Academic" : "");
+  $("sched").innerHTML = "";
+  (e?.schedule || []).forEach(([t, s]) => schedRow(t, s));
+}
+
+function readForm() {
+  const e = {};
+  for (const k of ["title", "date", "time", "venue", "category", "summary", "details", "who", "contact"]) e[k] = $("f-" + k).value.trim();
+  e.schedule = [...$("sched").children].map((r) => [...r.querySelectorAll("input")].map((i) => i.value.trim())).filter(([t, s]) => t || s);
+  return e;
+}
+
+function resetForm() { editing = -1; fillForm(null); $("formTitle").textContent = "Add an event"; $("cancelBtn").hidden = true; }
+
+async function start() {
+  try {
+    await load();
+    $("loginCard").hidden = true; $("app").hidden = false;
+    $("who").textContent = "Signed in. Changes appear on the website about one minute after saving.";
+    renderList();
+  } catch (err) {
+    say($("loginMsg"), err.message, false);
+    try { localStorage.removeItem("tcc-admin-token"); } catch (e) {}
+  }
+}
+
+$("loginBtn").onclick = () => {
+  token = $("tokenInput").value.trim();
+  if (!token) return;
+  try { localStorage.setItem("tcc-admin-token", token); } catch (e) {}
+  start();
+};
+$("logoutBtn").onclick = () => { try { localStorage.removeItem("tcc-admin-token"); } catch (e) {} location.reload(); };
+$("addSched").onclick = () => schedRow();
+$("cancelBtn").onclick = resetForm;
+
+$("form").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const e = readForm();
+  const list = events.slice();
+  if (editing >= 0) list[editing] = e; else list.push(e);
+  $("saveBtn").disabled = true;
+  try {
+    await commit(list, (editing >= 0 ? "Update event: " : "Add event: ") + e.title);
+    say($("status"), `Saved "${e.title}". It will show on the website in about a minute.`, true);
+    resetForm(); renderList();
+  } catch (err) { say($("status"), err.message, false); }
+  $("saveBtn").disabled = false;
+};
+
+$("list").onclick = async (ev) => {
+  const ed = ev.target.closest("[data-edit]"), del = ev.target.closest("[data-del]");
+  if (ed) {
+    editing = +ed.dataset.edit; fillForm(events[editing]);
+    $("formTitle").textContent = "Edit event"; $("cancelBtn").hidden = false;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  if (del) {
+    const i = +del.dataset.del;
+    if (del.dataset.confirm !== "1") { del.dataset.confirm = "1"; del.textContent = "Click again to delete"; return; }
+    const title = events[i].title;
+    const list = events.filter((_, j) => j !== i);
+    del.disabled = true;
+    try { await commit(list, "Delete event: " + title); say($("status"), `Deleted "${title}".`, true); renderList(); }
+    catch (err) { say($("status"), err.message, false); del.disabled = false; }
+  }
+};
+
+try { token = localStorage.getItem("tcc-admin-token") || ""; } catch (e) {}
+resetForm();
+if (token) start();
+</script>
+</body>
+</html>
