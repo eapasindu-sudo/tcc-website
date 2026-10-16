@@ -31,6 +31,8 @@ jobs:
           node-version: 20
 
       - name: Fetch Facebook posts
+        # If Facebook fails (e.g. expired token), still publish the site with the last saved posts
+        continue-on-error: true
         env:
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}

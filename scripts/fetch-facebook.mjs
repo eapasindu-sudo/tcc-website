@@ -4,8 +4,9 @@
 // Never put the token inside the website files — keep it as a secret.
 import { readFile, writeFile } from "node:fs/promises";
 
-const PAGE_ID = process.env.FB_PAGE_ID;
-const TOKEN = process.env.FB_PAGE_TOKEN;
+const clean = (v) => (v || "").trim().replace(/^["']|["']$/g, "");
+const PAGE_ID = clean(process.env.FB_PAGE_ID);
+const TOKEN = clean(process.env.FB_PAGE_TOKEN);
 const MAX_POSTS = Number(process.env.FB_MAX_POSTS || 60);
 const API = "https://graph.facebook.com/v21.0";
 const root = new URL("..", import.meta.url);
