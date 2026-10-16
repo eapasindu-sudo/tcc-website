@@ -32,8 +32,17 @@ function categorise(text) {
   return "General";
 }
 
+// A long-lived *user* token also works: swap it for the page's own token first.
+let pageToken = TOKEN;
+try {
+  const r = await fetch(`${API}/${PAGE_ID}?fields=access_token&access_token=${TOKEN}`);
+  const j = await r.json();
+  if (j.access_token) { pageToken = j.access_token; console.log("Got page token from user token"); }
+  else if (j.error) console.log("Using token as a page token (" + j.error.message + ")");
+} catch (e) { /* keep TOKEN */ }
+
 const fields = "id,message,created_time,permalink_url,full_picture,attachments{media_type,media,subattachments.limit(4){media}}";
-let url = `${API}/${PAGE_ID}/posts?fields=${encodeURIComponent(fields)}&limit=25&access_token=${TOKEN}`;
+let url = `${API}/${PAGE_ID}/posts?fields=${encodeURIComponent(fields)}&limit=25&access_token=${pageToken}`;
 const posts = [];
 
 while (url && posts.length < MAX_POSTS) {

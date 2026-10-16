@@ -21,6 +21,8 @@ so these steps must be done by (or with) a page admin.
    `access_token` shown for the school page does not expire.
 4. The page's `id` is shown in the same `me/accounts` result.
 
+Tip: the long-lived **user** token from step 3 also works as `FB_PAGE_TOKEN`; the script swaps it for the page token automatically.
+
 Keep the token secret. Never paste it into `index.html` or `main.js`.
 
 ## 2. Put the website on GitHub Pages
