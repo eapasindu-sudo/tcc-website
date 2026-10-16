@@ -53,20 +53,34 @@
 
 <main>
   <!-- Sign in -->
-  <section class="card" id="loginCard">
+  <section class="card" id="loginCard" hidden>
     <h2>Sign in</h2>
-    <p class="help">Paste the school's GitHub access token. It is saved only in this browser. See <strong>ADMIN.md</strong> in the website files for how to create one.</p>
-    <div class="row">
-      <input id="tokenInput" type="password" placeholder="github_pat_..." autocomplete="off" style="flex:1;min-width:220px">
-      <button id="loginBtn">Sign in</button>
-    </div>
+    <form id="loginForm" class="grid" style="max-width:520px">
+      <label class="full">Username<input id="l-user" autocomplete="username" required></label>
+      <label class="full">Password<input id="l-pass" type="password" autocomplete="current-password" required></label>
+      <div class="row full"><button id="loginBtn">Sign in</button></div>
+    </form>
     <p id="loginMsg"></p>
+  </section>
+
+  <!-- First-time setup: links a username and password to the school's GitHub token -->
+  <section class="card" id="setupCard" hidden>
+    <h2 id="setupTitle">First-time setup</h2>
+    <p class="help" id="setupHelp">Choose the admin username and password, and paste the school's GitHub access token once (see <strong>ADMIN.md</strong>). The token is locked with the password and saved to the website, so after this only the username and password are needed.</p>
+    <form id="setupForm" class="grid" style="max-width:520px">
+      <label class="full">Username<input id="s-user" autocomplete="username" required></label>
+      <label class="full">Password (at least 8 characters)<input id="s-pass" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label class="full">Repeat password<input id="s-pass2" type="password" autocomplete="new-password" required></label>
+      <label class="full" id="s-token-wrap">GitHub access token<input id="s-token" type="password" placeholder="github_pat_..." autocomplete="off"></label>
+      <div class="row full"><button id="setupBtn">Save</button><button type="button" class="ghost" id="setupCancel" hidden>Cancel</button></div>
+    </form>
+    <p id="setupMsg"></p>
   </section>
 
   <div id="app" hidden>
     <div class="row" style="justify-content:space-between;margin-bottom:12px">
       <span class="help" id="who"></span>
-      <button class="ghost" id="logoutBtn">Sign out</button>
+      <span class="row"><button class="ghost" id="changeBtn">Change password</button><button class="ghost" id="logoutBtn">Sign out</button></span>
     </div>
 
     <!-- Event form -->
@@ -187,25 +201,101 @@ function readForm() {
 
 function resetForm() { editing = -1; fillForm(null); $("formTitle").textContent = "Add an event"; $("cancelBtn").hidden = true; }
 
+/* ---------- Username / password ----------
+   data/admin-key.json holds the GitHub token encrypted (AES-GCM) with a key made from
+   username + password (PBKDF2). The token itself is never stored in plain text. */
+const KEY_PATH = "data/admin-key.json";
+const ITER = 600000;
+const u8 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+const tob64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+async function deriveKey(user, pass, salt, iter) {
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(user.trim().toLowerCase() + "\n" + pass), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: iter, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+}
+async function lockToken(user, pass, tok) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await deriveKey(user, pass, salt, ITER), new TextEncoder().encode(tok));
+  return { v: 1, iter: ITER, salt: tob64(salt), iv: tob64(iv), ct: tob64(ct) };
+}
+async function unlockToken(user, pass, k) {
+  const key = await deriveKey(user, pass, u8(k.salt), k.iter);
+  const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(k.iv) }, key, u8(k.ct));
+  return new TextDecoder().decode(pt);
+}
+async function getKeyFile() {
+  // read straight from GitHub so a new password works at once
+  const r = await fetch(`https://api.github.com/repos/${OWNER}/${REPO}/contents/${KEY_PATH}?ref=${BRANCH}&t=${Date.now()}`, { headers: { Accept: "application/vnd.github+json" } });
+  if (r.status === 404) return null;
+  if (r.ok) return JSON.parse(b64decode((await r.json()).content));
+  const r2 = await fetch(KEY_PATH + "?t=" + Date.now(), { cache: "no-store" }); // fallback if GitHub's limit is reached
+  return r2.ok ? r2.json() : null;
+}
+async function saveKeyFile(obj) {
+  const url = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${KEY_PATH}`;
+  const r0 = await fetch(`${url}?ref=${BRANCH}&t=${Date.now()}`, { headers: headers() });
+  if (r0.status === 401) throw new Error("This GitHub token is not valid.");
+  const body = { message: "Update admin sign-in", branch: BRANCH, content: b64encode(JSON.stringify(obj, null, 2) + "\n") };
+  if (r0.ok) body.sha = (await r0.json()).sha;
+  const r = await fetch(url, { method: "PUT", headers: headers(), body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(r.status === 403 || r.status === 404 ? "This token cannot change the website. It needs Contents: Read and write on the tcc-website repository." : "Save failed (" + r.status + ").");
+}
+
 async function start() {
   try {
     await load();
-    $("loginCard").hidden = true; $("app").hidden = false;
+    $("loginCard").hidden = true; $("setupCard").hidden = true; $("app").hidden = false;
     $("who").textContent = "Signed in. Changes appear on the website about one minute after saving.";
     renderList();
   } catch (err) {
+    token = "";
+    try { sessionStorage.removeItem("tcc-admin-token"); } catch (e) {}
     say($("loginMsg"), err.message, false);
-    try { localStorage.removeItem("tcc-admin-token"); } catch (e) {}
+    $("loginCard").hidden = false;
   }
 }
 
-$("loginBtn").onclick = () => {
-  token = $("tokenInput").value.trim();
-  if (!token) return;
-  try { localStorage.setItem("tcc-admin-token", token); } catch (e) {}
-  start();
+$("loginForm").onsubmit = async (ev) => {
+  ev.preventDefault();
+  $("loginBtn").disabled = true;
+  try {
+    const k = await getKeyFile();
+    if (!k) { showSetup(false); return; }
+    try { token = await unlockToken($("l-user").value, $("l-pass").value, k); }
+    catch (e) { throw new Error("Wrong username or password."); }
+    try { sessionStorage.setItem("tcc-admin-token", token); } catch (e) {}
+    $("l-pass").value = "";
+    await start();
+  } catch (err) { say($("loginMsg"), err.message, false); }
+  finally { $("loginBtn").disabled = false; }
 };
-$("logoutBtn").onclick = () => { try { localStorage.removeItem("tcc-admin-token"); } catch (e) {} location.reload(); };
+
+function showSetup(changing) {
+  $("loginCard").hidden = true; $("app").hidden = changing ? true : $("app").hidden; $("setupCard").hidden = false;
+  $("setupTitle").textContent = changing ? "Change username or password" : "First-time setup";
+  $("setupHelp").hidden = changing;
+  $("s-token-wrap").hidden = changing; $("s-token").required = !changing;
+  $("setupCancel").hidden = !changing;
+  $("setupForm").dataset.changing = changing ? "1" : "";
+}
+$("setupForm").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const changing = $("setupForm").dataset.changing === "1";
+  const user = $("s-user").value.trim(), pass = $("s-pass").value;
+  if (pass !== $("s-pass2").value) return say($("setupMsg"), "The two passwords are not the same.", false);
+  if (!changing) token = $("s-token").value.trim();
+  $("setupBtn").disabled = true;
+  try {
+    await saveKeyFile(await lockToken(user, pass, token));
+    try { sessionStorage.setItem("tcc-admin-token", token); } catch (e) {}
+    for (const id of ["s-pass", "s-pass2", "s-token"]) $(id).value = "";
+    say($("status"), changing ? "Username and password changed." : "Setup done. From now on sign in with your username and password.", true);
+    await start();
+  } catch (err) { say($("setupMsg"), err.message, false); }
+  finally { $("setupBtn").disabled = false; }
+};
+$("setupCancel").onclick = () => { $("setupCard").hidden = true; $("app").hidden = false; };
+$("changeBtn").onclick = () => showSetup(true);
+$("logoutBtn").onclick = () => { try { sessionStorage.removeItem("tcc-admin-token"); localStorage.removeItem("tcc-admin-token"); } catch (e) {} location.reload(); };
 $("addSched").onclick = () => schedRow();
 $("cancelBtn").onclick = resetForm;
 
@@ -241,9 +331,9 @@ $("list").onclick = async (ev) => {
   }
 };
 
-try { token = localStorage.getItem("tcc-admin-token") || ""; } catch (e) {}
+try { localStorage.removeItem("tcc-admin-token"); token = sessionStorage.getItem("tcc-admin-token") || ""; } catch (e) {}
 resetForm();
-if (token) start();
+if (token) start(); else $("loginCard").hidden = false;
 </script>
 </body>
 </html>

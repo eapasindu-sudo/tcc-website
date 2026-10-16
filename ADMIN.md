@@ -21,3 +21,15 @@ that browser. Anyone with the token can change the website, so keep it private.
 - Fill in the form and click **Save event**. The website updates in about a minute.
 - **Edit** loads an event back into the form; **Delete** asks you to click twice.
 - Events whose date has passed move to "Past events" on the website automatically.
+
+## Username and password sign-in
+
+After the first-time setup, the admin page asks only for a username and password.
+
+1. Open `admin.html`. If no admin account exists yet, it shows **First-time setup**.
+2. Enter the username, a password, and the GitHub token (created as described above), then press **Save**.
+3. The token is locked with the password and saved to `data/admin-key.json`. Nobody can read the token from that file without the password.
+4. From then on, sign in with the username and password only. Use **Change password** after signing in to change either one.
+
+If the token expires or is revoked, delete `data/admin-key.json` in GitHub and run the first-time setup again with a new token.
+Use a long password: the locked file is public, so a short password could be guessed with enough computing power.

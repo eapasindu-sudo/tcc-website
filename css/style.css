@@ -339,3 +339,28 @@ dialog.ev-dialog::backdrop { background: rgba(30,5,7,.55); backdrop-filter: blur
 .gallery figure:hover img { transform: scale(1.04); }
 .gallery img { transition: transform .4s ease; }
 .gallery-more { display: flex; justify-content: center; margin-top: 20px; }
+
+/* Contact map */
+.map-embed { width: 100%; aspect-ratio: 4 / 3; border: 0; border-radius: 12px; background: var(--chip); }
+
+/* Management structure */
+.org { display: grid; gap: 26px; }
+.org .sec-head { margin-bottom: 0; }
+.org-tier { display: grid; gap: 12px; position: relative; }
+.org-tier + .org-tier::before { content: ""; position: absolute; left: 50%; top: -26px; height: 26px; border-left: 2px solid var(--gold); }
+.org-t1 { grid-template-columns: 1fr 1.1fr 1fr; align-items: center; max-width: 760px; margin: 0 auto; width: 100%; }
+.org-t2 { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 860px; margin: 0 auto; width: 100%; }
+.org-t3, .org-t4 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.org-box { border-radius: 12px; padding: 14px 12px; text-align: center; display: grid; gap: 4px; align-content: center; font-family: var(--f-si); }
+.org-box strong { font-weight: 600; font-size: 1rem; line-height: 1.35; }
+.org-box small { font-size: .85rem; line-height: 1.5; opacity: .9; }
+.org-t1 .org-box { background: var(--chip); color: var(--maroon); border: 1px solid var(--line); }
+.org-t1 .org-box.top { background: var(--maroon-deep); color: #fff; border: 2px solid var(--gold); padding: 20px 12px; }
+.org-t1 .org-box.top strong { font-size: 1.2rem; }
+.org-t2 .org-box { background: var(--maroon); color: #fff; }
+.org-t3 .org-box { background: var(--gold); color: #2b0a00; }
+.org-t4 .org-box { background: #fff; color: var(--ink); border: 1.5px solid var(--gold); align-content: start; }
+.org-t4 .org-box strong { color: var(--maroon); }
+@media (max-width: 900px) { .org-t3, .org-t4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .org-t3 .org-box:last-child, .org-t4 .org-box:last-child { grid-column: 1 / -1; } }
+@media (max-width: 560px) { .org-t1, .org-t2 { grid-template-columns: 1fr; } .org-t1 .org-box.top { order: -1; } }
+.about > .org { grid-column: 1 / -1; }
