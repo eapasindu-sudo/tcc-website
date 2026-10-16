@@ -15,6 +15,9 @@ if (!PAGE_ID || !TOKEN) {
   console.error("Missing FB_PAGE_ID or FB_PAGE_TOKEN.");
   process.exit(1);
 }
+// Safe checks (never prints the token itself)
+console.log(`Page ID looks ${/^\d+$/.test(PAGE_ID) ? "OK (numbers only)" : "WRONG (should be numbers only)"}, length ${PAGE_ID.length}`);
+console.log(`Token length ${TOKEN.length}, starts with "EAA": ${TOKEN.startsWith("EAA")}, has spaces/new lines: ${/\s/.test(TOKEN)}`);
 
 const rules = JSON.parse(await readFile(new URL("data/categories.json", root), "utf8"));
 
