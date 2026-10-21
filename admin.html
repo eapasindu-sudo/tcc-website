@@ -42,7 +42,15 @@
   .help { color: var(--muted); font-size: .88rem; }
   .sched-row { display: grid; grid-template-columns: 120px minmax(0,1fr) auto; gap: 8px; }
   [hidden] { display: none !important; }
+  .x-table { border-collapse: collapse; font-size: .85rem; width: 100%; }
+  .x-table th, .x-table td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; white-space: nowrap; }
+  .x-table thead th { position: sticky; top: 0; background: #fff; }
+  .x-table select { padding: 4px 6px; font-size: .8rem; min-width: 110px; }
+  .x-table tr.skip td { color: #b3261e; text-decoration: line-through; }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="js/results-crypto.js"></script>
 </head>
 <body>
 <header>
@@ -137,6 +145,30 @@
       <p id="nStatus"></p>
       <h2 style="margin-top:20px">All notices</h2>
       <div class="list" id="nList"></div>
+    </section>
+
+    <!-- Exam results -->
+    <section class="card" id="resultsCard">
+      <h2>Exam results</h2>
+      <p class="help">Upload an Excel (.xlsx, .xls, .csv) or Word (.docx) file with one row per student. The columns are detected automatically; check them in the preview before publishing. Marks are encrypted, so each student can only see their own results.</p>
+      <form id="xForm" class="grid">
+        <label>Exam type
+          <select id="x-type"><option value="GRADE">Grades 6 – 11 (term test)</option><option value="OL">G.C.E. O/L</option><option value="AL">G.C.E. A/L</option></select>
+        </label>
+        <label id="x-grade-w">Grade<select id="x-grade"><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option></select></label>
+        <label>Year<input id="x-year" type="number" min="2000" max="2100" required></label>
+        <label>Exam name (shown to students)<input id="x-title" placeholder="e.g. Grade 9 – Third Term Test 2026" required></label>
+        <label class="full">File<input id="x-file" type="file" accept=".xlsx,.xls,.csv,.docx" required></label>
+      </form>
+      <div id="x-preview" hidden>
+        <p class="help" id="x-summary"></p>
+        <div style="overflow:auto;max-height:420px;border:1px solid var(--line);border-radius:10px"><table class="x-table" id="x-table"></table></div>
+        <label style="margin-top:12px;display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="x-needdob" style="width:auto"> Ask for date of birth as well (needs a date of birth column)</label>
+        <div class="row" style="margin-top:12px"><button type="button" id="x-publish">Publish results</button></div>
+      </div>
+      <p id="xStatus"></p>
+      <h2 style="margin-top:20px">Published results</h2>
+      <div class="list" id="xList"></div>
     </section>
   </div>
 </main>
@@ -265,6 +297,7 @@ async function start() {
     $("who").textContent = "Signed in. Changes appear on the website about one minute after saving.";
     renderList();
     await loadNotices();
+    await loadResultsList();
   } catch (err) {
     token = "";
     try { sessionStorage.removeItem("tcc-admin-token"); } catch (e) {}
@@ -397,6 +430,148 @@ $("nList").onclick = async (ev) => {
   }
 };
 nReset();
+
+/* ---------- Exam results ---------- */
+const ROLES = [["ignore", "Ignore"], ["name", "Student name"], ["adm", "Admission no."], ["nic", "ID card no."], ["dob", "Date of birth"], ["index", "Index no."], ["class", "Class"], ["subject", "Subject"], ["extra", "Total / average / rank"]];
+const DETECT = [
+  ["adm", /admission|adm\.?\s*no|^adm|ඇතුළත්|ඇතුලත්|ඇ\.?\s*අ/i],
+  ["nic", /\bnic\b|id\s*(card)?\s*no|identity|හැඳුනුම්|හැදුනුම්|ජා\.?\s*හැ/i],
+  ["dob", /birth|\bdob\b|උපන්/i],
+  ["index", /index|විභාග\s*අංක/i],
+  ["name", /name|නම/i],
+  ["class", /^class$|^cls$|පන්තිය/i],
+  ["extra", /total|average|avg|rank|place|position|එකතුව|සාමාන්‍ය|ස්ථානය|z.?score|result/i],
+  ["ignore", /^no\.?$|^#$|^s\.?\s*no|අනු\s*අංක|^ අංකය$/i],
+];
+let X = { rows: [], header: [], roles: [] };
+const rp = (path) => `https://api.github.com/repos/${OWNER}/${REPO}/contents/${path}`;
+async function getJSON(path, dflt) {
+  const r = await fetch(`${rp(path)}?ref=${BRANCH}&t=${Date.now()}`, { headers: headers() });
+  if (!r.ok) return { data: dflt, sha: null };
+  const j = await r.json();
+  return { data: JSON.parse(b64decode(j.content)), sha: j.sha };
+}
+async function putFile(path, text, message, sha) {
+  if (sha === undefined) { const r0 = await fetch(`${rp(path)}?ref=${BRANCH}&t=${Date.now()}`, { headers: headers() }); sha = r0.ok ? (await r0.json()).sha : null; }
+  const body = { message, branch: BRANCH, content: b64encode(text) }; if (sha) body.sha = sha;
+  const r = await fetch(rp(path), { method: "PUT", headers: headers(), body: JSON.stringify(body) });
+  if (!r.ok) throw new Error("Save failed (" + r.status + ").");
+}
+async function delFile(path, message) {
+  const r0 = await fetch(`${rp(path)}?ref=${BRANCH}&t=${Date.now()}`, { headers: headers() }); if (!r0.ok) return;
+  await fetch(rp(path), { method: "DELETE", headers: headers(), body: JSON.stringify({ message, branch: BRANCH, sha: (await r0.json()).sha }) });
+}
+
+async function readTable(file) {
+  if (/\.docx$/i.test(file.name)) {
+    const { value } = await mammoth.convertToHtml({ arrayBuffer: await file.arrayBuffer() });
+    const doc = new DOMParser().parseFromString(value, "text/html");
+    const tables = [...doc.querySelectorAll("table")];
+    if (!tables.length) throw new Error("No table found in the Word file. Put the marks in a table.");
+    const rows = [];
+    tables.forEach((t) => t.querySelectorAll("tr").forEach((tr) => rows.push([...tr.children].map((c) => c.textContent.trim()))));
+    return rows;
+  }
+  const wb = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: false });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: "" }).map((r) => r.map((c) => typeof c === "string" ? c.trim() : c));
+}
+function detect(rows) {
+  // header row = the first row (within the first 15) that contains a name or admission-number heading
+  let h = rows.slice(0, 15).findIndex((r) => r.some((c) => /name|නම|admission|ඇතුළත්|ඇතුලත්|index/i.test(String(c))));
+  if (h < 0) h = 0;
+  const header = rows[h].map((c, i) => String(c || "").trim() || `Column ${i + 1}`);
+  const data = rows.slice(h + 1).filter((r) => r.some((c) => String(c).trim() !== ""));
+  const used = new Set();
+  const roles = header.map((name, i) => {
+    for (const [role, re] of DETECT) {
+      if (re.test(name) && (role === "extra" || role === "ignore" || !used.has(role))) { used.add(role); return role; }
+    }
+    const vals = data.slice(0, 30).map((r) => r[i]).filter((v) => String(v).trim() !== "");
+    const marky = vals.length && vals.filter((v) => /^(\d{1,3}(\.\d+)?|[ABCSFW]|AB|ab|-)$/i.test(String(v).trim())).length / vals.length > 0.7;
+    return marky ? "subject" : "ignore";
+  });
+  return { header, rows: data, roles };
+}
+function lookupFields() {
+  const t = $("x-type").value, f = ["adm"];
+  if (t === "AL") f.push("nic");
+  if ($("x-needdob").checked) f.push("dob");
+  return f;
+}
+function rowOk(r) { return lookupFields().every((f) => { const i = X.roles.indexOf(f); return i >= 0 && RC.norm[f](r[i]) !== ""; }); }
+function renderPreview() {
+  const opts = (sel) => ROLES.map(([v, l]) => `<option value="${v}"${v === sel ? " selected" : ""}>${l}</option>`).join("");
+  const ok = X.rows.filter(rowOk).length;
+  const need = lookupFields().filter((f) => !X.roles.includes(f));
+  $("x-summary").innerHTML = `${X.rows.length} rows found, <b>${ok}</b> ready to publish.` + (need.length ? ` <span style="color:#b3261e">Choose which column is the ${need.map((f) => ROLES.find((r) => r[0] === f)[1]).join(" and ")}.</span>` : "") + ` Check each column's type below.`;
+  $("x-table").innerHTML = `<thead><tr>${X.roles.map((r, i) => `<th><select data-col="${i}">${opts(r)}</select><br>${esc(X.header[i])}</th>`).join("")}</tr></thead>
+    <tbody>${X.rows.slice(0, 200).map((r) => `<tr class="${rowOk(r) ? "" : "skip"}">${X.header.map((_, i) => `<td>${esc(r[i])}</td>`).join("")}</tr>`).join("")}</tbody>`;
+  $("x-publish").disabled = !ok || need.length > 0;
+}
+$("x-table").onchange = (e) => { const s = e.target.closest("select"); if (!s) return; X.roles[+s.dataset.col] = s.value; if (s.value === "dob") $("x-needdob").checked = true; renderPreview(); };
+$("x-needdob").onchange = renderPreview;
+$("x-type").onchange = () => { $("x-grade-w").hidden = $("x-type").value !== "GRADE"; if (X.rows.length) renderPreview(); };
+$("x-file").onchange = async () => {
+  const f = $("x-file").files[0]; if (!f) return;
+  try {
+    X = detect(await readTable(f));
+    $("x-needdob").checked = X.roles.includes("dob");
+    $("x-preview").hidden = false; renderPreview();
+  } catch (err) { say($("xStatus"), err.message || "Could not read this file.", false); }
+};
+$("x-publish").onclick = async () => {
+  if (!$("x-title").value.trim() || !$("x-year").value) return say($("xStatus"), "Fill in the exam name and year first.", false);
+  const fields = lookupFields();
+  const col = (role) => X.roles.indexOf(role);
+  const subj = X.roles.map((r, i) => r === "subject" ? i : -1).filter((i) => i >= 0);
+  const extr = X.roles.map((r, i) => r === "extra" ? i : -1).filter((i) => i >= 0);
+  const salt = RC.b64(crypto.getRandomValues(new Uint8Array(16)));
+  const rows = X.rows.filter(rowOk);
+  const out = { salt, iter: RC.ITER, subjects: subj.map((i) => X.header[i]), extras: extr.map((i) => X.header[i]), records: {} };
+  const v = (r, i) => (i < 0 ? "" : (typeof r[i] === "number" ? Math.round(r[i] * 100) / 100 : String(r[i] ?? "").trim()));
+  $("x-publish").disabled = true;
+  try {
+    for (let k = 0; k < rows.length; k++) {
+      const r = rows[k];
+      if (k % 10 === 0) say($("xStatus"), `Encrypting ${k + 1} of ${rows.length}…`, true);
+      const vals = { adm: r[col("adm")], nic: r[col("nic")], dob: r[col("dob")] };
+      const mat = RC.material(fields, vals);
+      out.records[await RC.lookupId(salt, mat)] = await RC.seal(salt, mat, { n: v(r, col("name")), i: v(r, col("index")), c: v(r, col("class")), m: subj.map((i) => v(r, i)), x: extr.map((i) => v(r, i)) });
+    }
+    const type = $("x-type").value, year = $("x-year").value;
+    const id = `${type.toLowerCase()}${type === "GRADE" ? "-g" + $("x-grade").value : ""}-${year}-${Date.now().toString(36)}`;
+    say($("xStatus"), "Saving…", true);
+    await putFile(`data/results/${id}.json`, JSON.stringify(out) + "\n", "Publish results: " + $("x-title").value.trim(), null);
+    const idx = await getJSON("data/results/index.json", []);
+    idx.data.push({ id, file: id + ".json", type, grade: type === "GRADE" ? $("x-grade").value : null, year, title: $("x-title").value.trim(), fields, count: rows.length, published: new Date().toISOString() });
+    await putFile("data/results/index.json", JSON.stringify(idx.data, null, 2) + "\n", "Add results: " + $("x-title").value.trim(), idx.sha);
+    say($("xStatus"), `Published ${rows.length} students' results. They will be on the website in about a minute.`, true);
+    $("x-preview").hidden = true; $("x-file").value = ""; X = { rows: [], header: [], roles: [] };
+    loadResultsList();
+  } catch (err) { say($("xStatus"), err.message, false); }
+  $("x-publish").disabled = false;
+};
+async function loadResultsList() {
+  const idx = await getJSON("data/results/index.json", []);
+  $("xList").innerHTML = idx.data.length ? idx.data.map((e, i) => `<div class="item"><div class="d"><b>${esc(e.year)}</b>${esc(e.type === "GRADE" ? "Gr " + e.grade : e.type)}</div>
+    <div><h3>${esc(e.title)}</h3><small>${e.count} students · asks for ${e.fields.map((f) => ({ adm: "admission no.", nic: "ID no.", dob: "date of birth" })[f]).join(" + ")}</small></div>
+    <div class="row"><button class="danger" data-xdel="${i}">Delete</button></div></div>`).join("") : `<p class="help">No results published yet.</p>`;
+  $("xList").dataset.json = JSON.stringify(idx.data);
+}
+$("xList").onclick = async (ev) => {
+  const del = ev.target.closest("[data-xdel]"); if (!del) return;
+  if (del.dataset.confirm !== "1") { del.dataset.confirm = "1"; del.textContent = "Click again to delete"; return; }
+  del.disabled = true;
+  try {
+    const idx = await getJSON("data/results/index.json", []);
+    const e = idx.data[+del.dataset.xdel];
+    await putFile("data/results/index.json", JSON.stringify(idx.data.filter((_, j) => j !== +del.dataset.xdel), null, 2) + "\n", "Remove results: " + e.title, idx.sha);
+    await delFile(`data/results/${e.file}`, "Delete results file: " + e.title);
+    say($("xStatus"), `Deleted "${e.title}".`, true); loadResultsList();
+  } catch (err) { say($("xStatus"), err.message, false); del.disabled = false; }
+};
+$("x-year").value = new Date().getFullYear();
 
 try { localStorage.removeItem("tcc-admin-token"); token = sessionStorage.getItem("tcc-admin-token") || ""; } catch (e) {}
 resetForm();

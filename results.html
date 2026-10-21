@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Exam Results · Thelijjawila Central College</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Official website of MR/ Thelijjawila Central College, Sri Lanka. නාසති විද්‍යා සමං මිත්‍රම්">
+<link rel="icon" href="assets/logo-color.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Marcellus&family=Noto+Serif+Sinhala:wght@400;600&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="results">
+<script src="js/layout.js" defer></script>
+
+<main>
+  <section class="page-hero">
+    <div class="wrap">
+      <p class="crumbs"><a href="index.html">Home</a> / Exam Results</p>
+      <span class="eyebrow">Students and parents</span>
+      <h1>Exam Results</h1>
+      <p>Choose the exam and enter the student's details to see their marks. Each student can see only their own results.</p>
+    </div>
+  </section>
+  <section class="block">
+    <div class="wrap">
+      <form class="res-form" id="resForm">
+        <label>Exam<select id="r-exam" required><option value="">Loading…</option></select></label>
+        <label id="w-adm">Admission number (ඇතුළත්වීමේ අංකය)<input id="r-adm" inputmode="text" autocomplete="off" required></label>
+        <label id="w-nic" hidden>ID card number (හැඳුනුම්පත් අංකය)<input id="r-nic" autocomplete="off"></label>
+        <label id="w-dob" hidden>Date of birth (උපන් දිනය)<input id="r-dob" type="date"></label>
+        <button class="btn btn--gold" id="r-go">View results</button>
+      </form>
+      <p id="r-msg" class="res-msg" hidden></p>
+      <div id="r-out"></div>
+    </div>
+  </section>
+</main>
+
+<script src="js/results-crypto.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let exams = [], cache = {};
+const TYPE = { OL: "G.C.E. O/L", AL: "G.C.E. A/L", GRADE: "Grade" };
+function examLabel(e) { return e.title || `${TYPE[e.type]}${e.type === "GRADE" ? " " + e.grade : ""} ${e.year}`; }
+function showFields() {
+  const e = exams.find((x) => x.id === $("r-exam").value);
+  const f = e ? e.fields : ["adm"];
+  for (const k of ["adm", "nic", "dob"]) { $("w-" + k).hidden = !f.includes(k); $("r-" + k).required = f.includes(k); }
+}
+fetch("data/results/index.json", { cache: "no-cache" }).then((r) => r.json()).catch(() => []).then((list) => {
+  exams = list.sort((a, b) => String(b.published).localeCompare(String(a.published)));
+  $("r-exam").innerHTML = exams.length ? exams.map((e) => `<option value="${esc(e.id)}">${esc(examLabel(e))}</option>`).join("") : `<option value="">No results published yet</option>`;
+  showFields();
+});
+$("r-exam").onchange = showFields;
+function say(t, ok) { const m = $("r-msg"); m.hidden = false; m.textContent = t; m.className = "res-msg " + (ok ? "ok" : "err"); }
+$("resForm").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const e = exams.find((x) => x.id === $("r-exam").value); if (!e) return;
+  $("r-go").disabled = true; $("r-out").innerHTML = ""; say("Checking…", true);
+  try {
+    const data = cache[e.id] ||= await (await fetch(`data/results/${e.file}`, { cache: "no-cache" })).json();
+    const mat = RC.material(e.fields, { adm: $("r-adm").value, nic: $("r-nic").value, dob: $("r-dob").value });
+    const rec = data.records[await RC.lookupId(data.salt, mat)];
+    if (!rec) throw new Error("No results found. Check the details and try again.");
+    const r = await RC.open(data.salt, mat, rec, data.iter);
+    $("r-msg").hidden = true;
+    const rows = data.subjects.map((s, i) => r.m[i] === "" || r.m[i] == null ? "" : `<tr><td>${esc(s)}</td><td>${esc(r.m[i])}</td></tr>`).join("");
+    const extra = (data.extras || []).map((s, i) => r.x?.[i] === "" || r.x?.[i] == null ? "" : `<div><small>${esc(s)}</small><b>${esc(r.x[i])}</b></div>`).join("");
+    $("r-out").innerHTML = `<article class="res-card">
+      <header><span class="eyebrow">${esc(examLabel(e))}</span><h2>${esc(r.n || "")}</h2><p>Admission No. ${esc($("r-adm").value)}${r.i ? " · Index No. " + esc(r.i) : ""}${r.c ? " · Class " + esc(r.c) : ""}</p></header>
+      <table class="info-table"><thead><tr><th>Subject</th><th>Marks / Grade</th></tr></thead><tbody>${rows}</tbody></table>
+      ${extra ? `<div class="res-extra">${extra}</div>` : ""}
+      <button class="btn btn--line" onclick="window.print()">Print</button>
+    </article>`;
+  } catch (err) { say(err.message.includes("No results") ? err.message : "No results found. Check the details and try again.", false); }
+  $("r-go").disabled = false;
+};
+</script>
+</body>
+</html>

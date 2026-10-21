@@ -8,6 +8,7 @@ const NAV = [
   ["identity", "Identity", "identity.html"],
   ["activities", "Student Activities", "activities.html"],
   ["notices", "Notice Board", "notices.html"],
+  ["results", "Exam Results", "results.html"],
   ["tv", "TCC TV", "tcc-tv.html"],
   ["donations", "Donations", "donations.html"],
   ["more", "More", null, [["events", "Events", "events.html"], ["gallery", "Gallery", "gallery.html"], ["contact", "Contact", "index.html#contact"]]],
