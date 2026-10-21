@@ -50,7 +50,7 @@
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-<script src="js/results-crypto.js"></script>
+
 </head>
 <body>
 <header>
@@ -79,7 +79,7 @@
       <label class="full">Username<input id="s-user" autocomplete="username" required></label>
       <label class="full">Password (at least 8 characters)<input id="s-pass" type="password" autocomplete="new-password" minlength="8" required></label>
       <label class="full">Repeat password<input id="s-pass2" type="password" autocomplete="new-password" required></label>
-      <label class="full" id="s-token-wrap">GitHub access token<input id="s-token" type="password" placeholder="github_pat_..." autocomplete="off"></label>
+      <label class="full" id="s-token-wrap"><span id="s-token-label">GitHub access token</span><input id="s-token" type="password" placeholder="github_pat_..." autocomplete="off"></label>
       <div class="row full"><button id="setupBtn">Save</button><button type="button" class="ghost" id="setupCancel" hidden>Cancel</button></div>
     </form>
     <p id="setupMsg"></p>
@@ -150,25 +150,30 @@
     <!-- Exam results -->
     <section class="card" id="resultsCard">
       <h2>Exam results</h2>
-      <p class="help">Upload an Excel (.xlsx, .xls, .csv) or Word (.docx) file with one row per student. The columns are detected automatically; check them in the preview before publishing. Marks are encrypted, so each student can only see their own results.</p>
+      <p class="help">Upload an Excel (.xlsx, .xls, .csv) or Word (.docx) file with one row per student. Names, admission numbers and subjects are detected automatically; check them in the preview before saving. Results are encrypted and can only be opened here, after signing in.</p>
       <form id="xForm" class="grid">
         <label>Exam type
           <select id="x-type"><option value="GRADE">Grades 6 – 11 (term test)</option><option value="OL">G.C.E. O/L</option><option value="AL">G.C.E. A/L</option></select>
         </label>
         <label id="x-grade-w">Grade<select id="x-grade"><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option></select></label>
         <label>Year<input id="x-year" type="number" min="2000" max="2100" required></label>
-        <label>Exam name (shown to students)<input id="x-title" placeholder="e.g. Grade 9 – Third Term Test 2026" required></label>
+        <label>Exam name<input id="x-title" placeholder="e.g. Grade 9 – Third Term Test 2026" required></label>
         <label class="full">File<input id="x-file" type="file" accept=".xlsx,.xls,.csv,.docx" required></label>
       </form>
       <div id="x-preview" hidden>
         <p class="help" id="x-summary"></p>
         <div style="overflow:auto;max-height:420px;border:1px solid var(--line);border-radius:10px"><table class="x-table" id="x-table"></table></div>
-        <label style="margin-top:12px;display:flex;gap:8px;align-items:center;font-weight:600"><input type="checkbox" id="x-needdob" style="width:auto"> Ask for date of birth as well (needs a date of birth column)</label>
-        <div class="row" style="margin-top:12px"><button type="button" id="x-publish">Publish results</button></div>
+        <div class="row" style="margin-top:12px"><button type="button" id="x-publish">Save results</button></div>
       </div>
       <p id="xStatus"></p>
-      <h2 style="margin-top:20px">Published results</h2>
+      <h2 style="margin-top:20px">Saved results</h2>
       <div class="list" id="xList"></div>
+    </section>
+
+    <section class="card" id="viewCard" hidden>
+      <div class="row" style="justify-content:space-between"><h2 id="v-title" style="margin:0"></h2><span class="row"><button class="ghost" id="v-csv">Download Excel (CSV)</button><button class="ghost" id="v-close">Close</button></span></div>
+      <div class="row" style="margin:12px 0"><input id="v-q" placeholder="Search by name or admission number" style="max-width:360px"><span class="help" id="v-count"></span></div>
+      <div style="overflow:auto;max-height:560px;border:1px solid var(--line);border-radius:10px"><table class="x-table" id="v-table"></table></div>
     </section>
   </div>
 </main>
@@ -290,6 +295,14 @@ async function saveKeyFile(obj) {
   if (!r.ok) throw new Error(r.status === 403 || r.status === 404 ? "This token cannot change the website. It needs Contents: Read and write on the tcc-website repository." : "Save failed (" + r.status + ").");
 }
 
+/* Data key: a random key, kept inside the password-locked file, that encrypts the exam results. */
+let dataKey = null;
+const newDataKey = () => tob64(crypto.getRandomValues(new Uint8Array(32)));
+function saveSession() { try { sessionStorage.setItem("tcc-admin-token", token); if (dataKey) sessionStorage.setItem("tcc-admin-dk", dataKey); } catch (e) {} }
+async function dk() { return crypto.subtle.importKey("raw", u8(dataKey), "AES-GCM", false, ["encrypt", "decrypt"]); }
+async function seal(obj) { const iv = crypto.getRandomValues(new Uint8Array(12)); return { v: 1, iv: tob64(iv), ct: tob64(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await dk(), new TextEncoder().encode(JSON.stringify(obj)))) }; }
+async function unseal(b) { return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(b.iv) }, await dk(), u8(b.ct)))); }
+
 async function start() {
   try {
     await load();
@@ -312,9 +325,12 @@ $("loginForm").onsubmit = async (ev) => {
   try {
     const k = await getKeyFile();
     if (!k) { showSetup(false); return; }
-    try { token = await unlockToken($("l-user").value, $("l-pass").value, k); }
+    let secret;
+    try { secret = await unlockToken($("l-user").value, $("l-pass").value, k); }
     catch (e) { throw new Error("Wrong username or password."); }
-    try { sessionStorage.setItem("tcc-admin-token", token); } catch (e) {}
+    try { const o = JSON.parse(secret); token = o.t; dataKey = o.k; } catch (e) { token = secret; dataKey = null; }
+    if (!dataKey) { dataKey = newDataKey(); await saveKeyFile(await lockToken($("l-user").value, $("l-pass").value, JSON.stringify({ t: token, k: dataKey }))); }
+    saveSession();
     $("l-pass").value = "";
     await start();
   } catch (err) { say($("loginMsg"), err.message, false); }
@@ -325,7 +341,8 @@ function showSetup(changing) {
   $("loginCard").hidden = true; $("app").hidden = changing ? true : $("app").hidden; $("setupCard").hidden = false;
   $("setupTitle").textContent = changing ? "Change username or password" : "First-time setup";
   $("setupHelp").hidden = changing;
-  $("s-token-wrap").hidden = changing; $("s-token").required = !changing;
+  $("s-token").required = !changing;
+  $("s-token-label").textContent = changing ? "New GitHub access token (leave empty to keep the current one)" : "GitHub access token";
   $("setupCancel").hidden = !changing;
   $("setupForm").dataset.changing = changing ? "1" : "";
 }
@@ -334,11 +351,13 @@ $("setupForm").onsubmit = async (ev) => {
   const changing = $("setupForm").dataset.changing === "1";
   const user = $("s-user").value.trim(), pass = $("s-pass").value;
   if (pass !== $("s-pass2").value) return say($("setupMsg"), "The two passwords are not the same.", false);
-  if (!changing) token = $("s-token").value.trim();
+  const newTok = $("s-token").value.trim();
+  if (!changing || newTok) token = newTok;
+  if (!dataKey) dataKey = newDataKey();
   $("setupBtn").disabled = true;
   try {
-    await saveKeyFile(await lockToken(user, pass, token));
-    try { sessionStorage.setItem("tcc-admin-token", token); } catch (e) {}
+    await saveKeyFile(await lockToken(user, pass, JSON.stringify({ t: token, k: dataKey })));
+    saveSession();
     for (const id of ["s-pass", "s-pass2", "s-token"]) $(id).value = "";
     say($("status"), changing ? "Username and password changed." : "Setup done. From now on sign in with your username and password.", true);
     await start();
@@ -347,7 +366,7 @@ $("setupForm").onsubmit = async (ev) => {
 };
 $("setupCancel").onclick = () => { $("setupCard").hidden = true; $("app").hidden = false; };
 $("changeBtn").onclick = () => showSetup(true);
-$("logoutBtn").onclick = () => { try { sessionStorage.removeItem("tcc-admin-token"); localStorage.removeItem("tcc-admin-token"); } catch (e) {} location.reload(); };
+$("logoutBtn").onclick = () => { try { sessionStorage.removeItem("tcc-admin-dk"); sessionStorage.removeItem("tcc-admin-token"); localStorage.removeItem("tcc-admin-token"); } catch (e) {} location.reload(); };
 $("addSched").onclick = () => schedRow();
 $("cancelBtn").onclick = resetForm;
 
@@ -493,87 +512,102 @@ function detect(rows) {
   });
   return { header, rows: data, roles };
 }
-function lookupFields() {
-  const t = $("x-type").value, f = ["adm"];
-  if (t === "AL") f.push("nic");
-  if ($("x-needdob").checked) f.push("dob");
-  return f;
+function lookupFields() { return $("x-type").value === "AL" ? ["adm", "nic"] : ["adm"]; }
+const clean = (v) => String(v ?? "").trim();
+function rowOk(r) { const n = X.roles.indexOf("name"), a = X.roles.indexOf("adm"); return (n >= 0 && clean(r[n])) || (a >= 0 && clean(r[a])); }
+function fmtDob(v) {
+  if (typeof v === "number") return new Date(Math.round((v - 25569) * 864e5)).toISOString().slice(0, 10);
+  return clean(v);
 }
-function rowOk(r) { return lookupFields().every((f) => { const i = X.roles.indexOf(f); return i >= 0 && RC.norm[f](r[i]) !== ""; }); }
 function renderPreview() {
   const opts = (sel) => ROLES.map(([v, l]) => `<option value="${v}"${v === sel ? " selected" : ""}>${l}</option>`).join("");
   const ok = X.rows.filter(rowOk).length;
-  const need = lookupFields().filter((f) => !X.roles.includes(f));
-  $("x-summary").innerHTML = `${X.rows.length} rows found, <b>${ok}</b> ready to publish.` + (need.length ? ` <span style="color:#b3261e">Choose which column is the ${need.map((f) => ROLES.find((r) => r[0] === f)[1]).join(" and ")}.</span>` : "") + ` Check each column's type below.`;
+  const need = X.roles.includes("name") || X.roles.includes("adm") ? [] : ["name"];
+  $("x-summary").innerHTML = `${X.rows.length} rows found, <b>${ok}</b> ready to save.` + (need.length ? ` <span style="color:#b3261e">Choose which column is the ${need.map((f) => ROLES.find((r) => r[0] === f)[1]).join(" and ")}.</span>` : "") + ` Check each column's type below.`;
   $("x-table").innerHTML = `<thead><tr>${X.roles.map((r, i) => `<th><select data-col="${i}">${opts(r)}</select><br>${esc(X.header[i])}</th>`).join("")}</tr></thead>
     <tbody>${X.rows.slice(0, 200).map((r) => `<tr class="${rowOk(r) ? "" : "skip"}">${X.header.map((_, i) => `<td>${esc(r[i])}</td>`).join("")}</tr>`).join("")}</tbody>`;
   $("x-publish").disabled = !ok || need.length > 0;
 }
-$("x-table").onchange = (e) => { const s = e.target.closest("select"); if (!s) return; X.roles[+s.dataset.col] = s.value; if (s.value === "dob") $("x-needdob").checked = true; renderPreview(); };
-$("x-needdob").onchange = renderPreview;
+$("x-table").onchange = (e) => { const s = e.target.closest("select"); if (!s) return; X.roles[+s.dataset.col] = s.value; renderPreview(); };
 $("x-type").onchange = () => { $("x-grade-w").hidden = $("x-type").value !== "GRADE"; if (X.rows.length) renderPreview(); };
 $("x-file").onchange = async () => {
   const f = $("x-file").files[0]; if (!f) return;
   try {
     X = detect(await readTable(f));
-    $("x-needdob").checked = X.roles.includes("dob");
     $("x-preview").hidden = false; renderPreview();
   } catch (err) { say($("xStatus"), err.message || "Could not read this file.", false); }
 };
 $("x-publish").onclick = async () => {
   if (!$("x-title").value.trim() || !$("x-year").value) return say($("xStatus"), "Fill in the exam name and year first.", false);
-  const fields = lookupFields();
-  const col = (role) => X.roles.indexOf(role);
-  const subj = X.roles.map((r, i) => r === "subject" ? i : -1).filter((i) => i >= 0);
-  const extr = X.roles.map((r, i) => r === "extra" ? i : -1).filter((i) => i >= 0);
-  const salt = RC.b64(crypto.getRandomValues(new Uint8Array(16)));
-  const rows = X.rows.filter(rowOk);
-  const out = { salt, iter: RC.ITER, subjects: subj.map((i) => X.header[i]), extras: extr.map((i) => X.header[i]), records: {} };
-  const v = (r, i) => (i < 0 ? "" : (typeof r[i] === "number" ? Math.round(r[i] * 100) / 100 : String(r[i] ?? "").trim()));
+  const cols = X.roles.map((r, i) => ({ r, i })).filter((c) => c.r !== "ignore");
+  const rows = X.rows.filter(rowOk).map((r) => cols.map(({ r: role, i }) => role === "dob" ? fmtDob(r[i]) : (typeof r[i] === "number" ? Math.round(r[i] * 100) / 100 : clean(r[i]))));
+  const type = $("x-type").value, year = $("x-year").value, title = $("x-title").value.trim();
+  const id = `${type.toLowerCase()}${type === "GRADE" ? "-g" + $("x-grade").value : ""}-${year}-${Date.now().toString(36)}`;
   $("x-publish").disabled = true;
   try {
-    for (let k = 0; k < rows.length; k++) {
-      const r = rows[k];
-      if (k % 10 === 0) say($("xStatus"), `Encrypting ${k + 1} of ${rows.length}…`, true);
-      const vals = { adm: r[col("adm")], nic: r[col("nic")], dob: r[col("dob")] };
-      const mat = RC.material(fields, vals);
-      out.records[await RC.lookupId(salt, mat)] = await RC.seal(salt, mat, { n: v(r, col("name")), i: v(r, col("index")), c: v(r, col("class")), m: subj.map((i) => v(r, i)), x: extr.map((i) => v(r, i)) });
-    }
-    const type = $("x-type").value, year = $("x-year").value;
-    const id = `${type.toLowerCase()}${type === "GRADE" ? "-g" + $("x-grade").value : ""}-${year}-${Date.now().toString(36)}`;
     say($("xStatus"), "Saving…", true);
-    await putFile(`data/results/${id}.json`, JSON.stringify(out) + "\n", "Publish results: " + $("x-title").value.trim(), null);
-    const idx = await getJSON("data/results/index.json", []);
-    idx.data.push({ id, file: id + ".json", type, grade: type === "GRADE" ? $("x-grade").value : null, year, title: $("x-title").value.trim(), fields, count: rows.length, published: new Date().toISOString() });
-    await putFile("data/results/index.json", JSON.stringify(idx.data, null, 2) + "\n", "Add results: " + $("x-title").value.trim(), idx.sha);
-    say($("xStatus"), `Published ${rows.length} students' results. They will be on the website in about a minute.`, true);
+    await putFile(`data/results/${id}.json`, JSON.stringify(await seal({ columns: cols.map(({ r, i }) => ({ role: r, name: X.header[i] })), rows })) + "\n", "Save exam results", null);
+    const idx = await loadIndex();
+    idx.list.push({ id, type, grade: type === "GRADE" ? $("x-grade").value : null, year, title, count: rows.length, saved: new Date().toISOString() });
+    await putFile("data/results/index.json", JSON.stringify(await seal(idx.list)) + "\n", "Update exam results list", idx.sha);
+    say($("xStatus"), `Saved ${rows.length} students' marks for "${title}".`, true);
     $("x-preview").hidden = true; $("x-file").value = ""; X = { rows: [], header: [], roles: [] };
     loadResultsList();
   } catch (err) { say($("xStatus"), err.message, false); }
   $("x-publish").disabled = false;
 };
+async function loadIndex() {
+  const r = await fetch(`${rp("data/results/index.json")}?ref=${BRANCH}&t=${Date.now()}`, { headers: headers() });
+  if (!r.ok) return { list: [], sha: null };
+  const j = await r.json(), raw = JSON.parse(b64decode(j.content));
+  return { list: Array.isArray(raw) ? [] : await unseal(raw), sha: j.sha };
+}
+let XLIST = [];
 async function loadResultsList() {
-  const idx = await getJSON("data/results/index.json", []);
-  $("xList").innerHTML = idx.data.length ? idx.data.map((e, i) => `<div class="item"><div class="d"><b>${esc(e.year)}</b>${esc(e.type === "GRADE" ? "Gr " + e.grade : e.type)}</div>
-    <div><h3>${esc(e.title)}</h3><small>${e.count} students · asks for ${e.fields.map((f) => ({ adm: "admission no.", nic: "ID no.", dob: "date of birth" })[f]).join(" + ")}</small></div>
-    <div class="row"><button class="danger" data-xdel="${i}">Delete</button></div></div>`).join("") : `<p class="help">No results published yet.</p>`;
-  $("xList").dataset.json = JSON.stringify(idx.data);
+  try { XLIST = (await loadIndex()).list; } catch (e) { $("xList").innerHTML = `<p class="help">Could not open the saved results.</p>`; return; }
+  $("xList").innerHTML = XLIST.length ? XLIST.slice().reverse().map((e) => `<div class="item"><div class="d"><b>${esc(e.year)}</b>${esc(e.type === "GRADE" ? "Gr " + e.grade : e.type)}</div>
+    <div><h3>${esc(e.title)}</h3><small>${e.count} students</small></div>
+    <div class="row"><button class="ghost" data-xview="${esc(e.id)}">View</button><button class="danger" data-xdel="${esc(e.id)}">Delete</button></div></div>`).join("") : `<p class="help">No results saved yet.</p>`;
+}
+let VIEW = null;
+function renderView() {
+  const q = $("v-q").value.trim().toLowerCase();
+  const rows = VIEW.data.rows.filter((r) => !q || r.some((c) => String(c).toLowerCase().includes(q)));
+  $("v-count").textContent = `${rows.length} of ${VIEW.data.rows.length} students`;
+  $("v-table").innerHTML = `<thead><tr>${VIEW.data.columns.map((c) => `<th>${esc(c.name)}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody>`;
 }
 $("xList").onclick = async (ev) => {
-  const del = ev.target.closest("[data-xdel]"); if (!del) return;
-  if (del.dataset.confirm !== "1") { del.dataset.confirm = "1"; del.textContent = "Click again to delete"; return; }
-  del.disabled = true;
-  try {
-    const idx = await getJSON("data/results/index.json", []);
-    const e = idx.data[+del.dataset.xdel];
-    await putFile("data/results/index.json", JSON.stringify(idx.data.filter((_, j) => j !== +del.dataset.xdel), null, 2) + "\n", "Remove results: " + e.title, idx.sha);
-    await delFile(`data/results/${e.file}`, "Delete results file: " + e.title);
-    say($("xStatus"), `Deleted "${e.title}".`, true); loadResultsList();
-  } catch (err) { say($("xStatus"), err.message, false); del.disabled = false; }
+  const view = ev.target.closest("[data-xview]"), del = ev.target.closest("[data-xdel]");
+  if (view) {
+    const e = XLIST.find((x) => x.id === view.dataset.xview);
+    try {
+      const j = await getJSON(`data/results/${e.id}.json`, null);
+      VIEW = { e, data: await unseal(j.data) };
+      $("v-title").textContent = e.title; $("v-q").value = ""; $("viewCard").hidden = false; renderView();
+      $("viewCard").scrollIntoView({ behavior: "smooth" });
+    } catch (err) { say($("xStatus"), "Could not open these results.", false); }
+  }
+  if (del) {
+    if (del.dataset.confirm !== "1") { del.dataset.confirm = "1"; del.textContent = "Click again to delete"; return; }
+    del.disabled = true;
+    try {
+      const idx = await loadIndex(); const e = idx.list.find((x) => x.id === del.dataset.xdel);
+      await putFile("data/results/index.json", JSON.stringify(await seal(idx.list.filter((x) => x.id !== e.id))) + "\n", "Update exam results list", idx.sha);
+      await delFile(`data/results/${e.id}.json`, "Delete exam results");
+      say($("xStatus"), `Deleted "${e.title}".`, true); loadResultsList();
+    } catch (err) { say($("xStatus"), err.message, false); del.disabled = false; }
+  }
+};
+$("v-q").oninput = () => VIEW && renderView();
+$("v-close").onclick = () => { $("viewCard").hidden = true; VIEW = null; };
+$("v-csv").onclick = () => {
+  const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
+  const csv = "\ufeff" + [VIEW.data.columns.map((c) => q(c.name)).join(","), ...VIEW.data.rows.map((r) => r.map(q).join(","))].join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = VIEW.e.title.replace(/[^\w\- ]+/g, "") + ".csv"; a.click();
 };
 $("x-year").value = new Date().getFullYear();
 
-try { localStorage.removeItem("tcc-admin-token"); token = sessionStorage.getItem("tcc-admin-token") || ""; } catch (e) {}
+try { localStorage.removeItem("tcc-admin-token"); token = sessionStorage.getItem("tcc-admin-token") || ""; dataKey = sessionStorage.getItem("tcc-admin-dk") || null; } catch (e) {}
 resetForm();
 if (token) start(); else $("loginCard").hidden = false;
 </script>
