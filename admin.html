@@ -157,6 +157,7 @@
         </label>
         <label id="x-grade-w">Grade<select id="x-grade"><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option></select></label>
         <label>Year<input id="x-year" type="number" min="2000" max="2100" required></label>
+        <label>Class (optional, if the whole file is one class)<input id="x-class" placeholder="e.g. 9A"></label>
         <label>Exam name<input id="x-title" placeholder="e.g. Grade 9 – Third Term Test 2026" required></label>
         <label class="full">File<input id="x-file" type="file" accept=".xlsx,.xls,.csv,.docx" required></label>
       </form>
@@ -168,6 +169,20 @@
       <p id="xStatus"></p>
       <h2 style="margin-top:20px">Saved results</h2>
       <div class="list" id="xList"></div>
+    </section>
+
+    <!-- Teacher accounts: teachers sign in at teacher.html and can only view results -->
+    <section class="card" id="teachersCard">
+      <h2>Teacher accounts</h2>
+      <p class="help">Teachers sign in at <a href="teacher.html">teacher.html</a> to view marks by class. They cannot add, change or delete anything.</p>
+      <form id="tForm" class="grid">
+        <label>Teacher's name<input id="t-name" required></label>
+        <label>Username<input id="t-user" autocomplete="off" required></label>
+        <label>Password (at least 8 characters)<input id="t-pass" type="text" autocomplete="off" minlength="8" required></label>
+        <div class="row" style="align-items:end"><button id="tAddBtn">Add teacher</button></div>
+      </form>
+      <p id="tStatus"></p>
+      <div class="list" id="tList"></div>
     </section>
 
     <section class="card" id="viewCard" hidden>
@@ -311,6 +326,7 @@ async function start() {
     renderList();
     await loadNotices();
     await loadResultsList();
+    await renderTeachers();
   } catch (err) {
     token = "";
     try { sessionStorage.removeItem("tcc-admin-token"); } catch (e) {}
@@ -540,18 +556,21 @@ $("x-file").onchange = async () => {
 $("x-publish").onclick = async () => {
   if (!$("x-title").value.trim() || !$("x-year").value) return say($("xStatus"), "Fill in the exam name and year first.", false);
   const cols = X.roles.map((r, i) => ({ r, i })).filter((c) => c.r !== "ignore");
-  const rows = X.rows.filter(rowOk).map((r) => cols.map(({ r: role, i }) => role === "dob" ? fmtDob(r[i]) : (typeof r[i] === "number" ? Math.round(r[i] * 100) / 100 : clean(r[i]))));
+  let rows = X.rows.filter(rowOk).map((r) => cols.map(({ r: role, i }) => role === "dob" ? fmtDob(r[i]) : (typeof r[i] === "number" ? Math.round(r[i] * 100) / 100 : clean(r[i]))));
+  const fileClass = $("x-class").value.trim();
+  const columns = cols.map(({ r, i }) => ({ role: r, name: X.header[i] }));
+  if (fileClass && !X.roles.includes("class")) { columns.splice(Math.min(2, columns.length), 0, { role: "class", name: "Class" }); rows = rows.map((r) => { r = r.slice(); r.splice(Math.min(2, r.length), 0, fileClass); return r; }); }
   const type = $("x-type").value, year = $("x-year").value, title = $("x-title").value.trim();
   const id = `${type.toLowerCase()}${type === "GRADE" ? "-g" + $("x-grade").value : ""}-${year}-${Date.now().toString(36)}`;
   $("x-publish").disabled = true;
   try {
     say($("xStatus"), "Saving…", true);
-    await putFile(`data/results/${id}.json`, JSON.stringify(await seal({ columns: cols.map(({ r, i }) => ({ role: r, name: X.header[i] })), rows })) + "\n", "Save exam results", null);
+    await putFile(`data/results/${id}.json`, JSON.stringify(await seal({ columns, rows })) + "\n", "Save exam results", null);
     const idx = await loadIndex();
     idx.list.push({ id, type, grade: type === "GRADE" ? $("x-grade").value : null, year, title, count: rows.length, saved: new Date().toISOString() });
     await putFile("data/results/index.json", JSON.stringify(await seal(idx.list)) + "\n", "Update exam results list", idx.sha);
     say($("xStatus"), `Saved ${rows.length} students' marks for "${title}".`, true);
-    $("x-preview").hidden = true; $("x-file").value = ""; X = { rows: [], header: [], roles: [] };
+    $("x-preview").hidden = true; $("x-file").value = ""; $("x-class").value = ""; X = { rows: [], header: [], roles: [] };
     loadResultsList();
   } catch (err) { say($("xStatus"), err.message, false); }
   $("x-publish").disabled = false;
@@ -604,6 +623,41 @@ $("v-csv").onclick = () => {
   const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
   const csv = "\ufeff" + [VIEW.data.columns.map((c) => q(c.name)).join(","), ...VIEW.data.rows.map((r) => r.map(q).join(","))].join("\n");
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = VIEW.e.title.replace(/[^\w\- ]+/g, "") + ".csv"; a.click();
+};
+
+/* ---------- Teacher accounts (data/teachers.json) ----------
+   Each entry holds the results key locked with that teacher's username + password. */
+async function loadTeachers() { return getJSON("data/teachers.json", []); }
+async function renderTeachers() {
+  const t = (await loadTeachers()).data;
+  $("tList").innerHTML = t.length ? t.map((x, i) => `<div class="item" style="grid-template-columns:minmax(0,1fr) auto"><div><h3>${esc(x.name)}</h3><small>Username: ${esc(x.u)}</small></div>
+    <div class="row"><button class="danger" data-tdel="${i}">Remove</button></div></div>`).join("") : `<p class="help">No teacher accounts yet.</p>`;
+}
+$("tForm").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const u = $("t-user").value.trim().toLowerCase(), name = $("t-name").value.trim(), pass = $("t-pass").value;
+  $("tAddBtn").disabled = true;
+  try {
+    const t = await loadTeachers();
+    if (t.data.some((x) => x.u === u)) throw new Error("That username is already used.");
+    const lock = await lockToken(u, pass, dataKey);
+    t.data.push({ u, name, ...lock });
+    await putFile("data/teachers.json", JSON.stringify(t.data, null, 2) + "\n", "Add teacher account: " + u, t.sha);
+    say($("tStatus"), `Added ${name}. Give them the username "${u}" and the password. They sign in at teacher.html.`, true);
+    for (const id of ["t-name", "t-user", "t-pass"]) $(id).value = "";
+    renderTeachers();
+  } catch (err) { say($("tStatus"), err.message, false); }
+  $("tAddBtn").disabled = false;
+};
+$("tList").onclick = async (ev) => {
+  const del = ev.target.closest("[data-tdel]"); if (!del) return;
+  if (del.dataset.confirm !== "1") { del.dataset.confirm = "1"; del.textContent = "Click again to remove"; return; }
+  del.disabled = true;
+  try {
+    const t = await loadTeachers(); const x = t.data[+del.dataset.tdel];
+    await putFile("data/teachers.json", JSON.stringify(t.data.filter((_, j) => j !== +del.dataset.tdel), null, 2) + "\n", "Remove teacher account: " + x.u, t.sha);
+    say($("tStatus"), `Removed ${x.name}.`, true); renderTeachers();
+  } catch (err) { say($("tStatus"), err.message, false); del.disabled = false; }
 };
 $("x-year").value = new Date().getFullYear();
 

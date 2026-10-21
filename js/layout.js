@@ -41,7 +41,7 @@ const NAV = [
       <a href="https://www.facebook.com/thelijjawilacentralcollege" target="_blank" rel="noopener">Facebook</a>
       <a href="https://www.youtube.com/@ThelijjawilaCentralCollege" target="_blank" rel="noopener">YouTube</a>
     </div>
-    <small>© ${new Date().getFullYear()} MR/ Thelijjawila Central College WEB DEVELOPMENT UNIT. All rights reserved. · <a href="admin.html">Admin</a></small>
+    <small>© ${new Date().getFullYear()} MR/ Thelijjawila Central College WEB DEVELOPMENT UNIT. All rights reserved. · <a href="teacher.html">Teachers</a> · <a href="admin.html">Admin</a></small>
   </div>
 </footer>
 <button class="to-top" id="toTop" aria-label="Go to top" hidden>↑</button>`);

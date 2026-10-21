@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Teachers · Thelijjawila Central College</title>
+<link rel="icon" href="assets/logo-color.webp">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=Marcellus&display=swap">
+<style>
+  :root { --maroon: #7e1a1e; --deep: #4f0d11; --gold: #e8a417; --ink: #2b1315; --muted: #6e5754; --line: #eadfd9; --chip: #f6ece7; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.6 "Figtree", system-ui, sans-serif; background: #faf6f3; color: var(--ink); }
+  header { background: var(--deep); color: #fff6e6; border-bottom: 3px solid var(--gold); padding: 14px max(16px, env(safe-area-inset-left)); display: flex; gap: 12px; align-items: center; }
+  header img { width: 42px; height: 42px; background: #fff; border-radius: 50%; padding: 2px; }
+  header h1 { font: 400 1.2rem "Marcellus", serif; margin: 0; }
+  header a { margin-left: auto; color: #f7d987; }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 60px; display: grid; gap: 22px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+  h2 { font: 400 1.4rem "Marcellus", serif; margin: 0 0 12px; color: var(--maroon); }
+  label { display: grid; gap: 4px; font-weight: 600; font-size: .9rem; }
+  input, select, textarea { font: inherit; padding: 9px 11px; border: 1px solid #d9c8c0; border-radius: 8px; background: #fff; color: var(--ink); width: 100%; }
+  textarea { min-height: 90px; resize: vertical; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .full { grid-column: 1 / -1; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+  button { font: inherit; font-weight: 600; border-radius: 999px; padding: 9px 18px; border: 1.5px solid var(--maroon); background: var(--maroon); color: #fff; cursor: pointer; }
+  button.ghost { background: #fff; color: var(--maroon); }
+  button.danger { background: #fff; color: #b3261e; border-color: #b3261e; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .list { display: grid; gap: 10px; }
+  .item { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: 14px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .item .d { background: var(--maroon); color: #fff; text-align: center; border-radius: 8px; padding: 6px 2px; font-size: .8rem; line-height: 1.2; }
+  .item .d b { display: block; font-size: 1.4rem; font-family: "Marcellus", serif; font-weight: 400; }
+  .item.past .d { background: var(--muted); }
+  .item h3 { margin: 0; font-size: 1.05rem; }
+  .item small { color: var(--muted); }
+  .msg { padding: 10px 14px; border-radius: 10px; font-size: .92rem; }
+  .msg.ok { background: #e7f4ea; color: #1e5b2b; }
+  .msg.err { background: #fbe9e7; color: #8c1d18; }
+  .help { color: var(--muted); font-size: .88rem; }
+  .sched-row { display: grid; grid-template-columns: 120px minmax(0,1fr) auto; gap: 8px; }
+  [hidden] { display: none !important; }
+  .x-table { border-collapse: collapse; font-size: .85rem; width: 100%; }
+  .x-table th, .x-table td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: left; white-space: nowrap; }
+  .x-table thead th { position: sticky; top: 0; background: #fff; }
+  .x-table select { padding: 4px 6px; font-size: .8rem; min-width: 110px; }
+  .x-table tr.skip td { color: #b3261e; text-decoration: line-through; }
+</style>
+</head>
+<body>
+<header>
+  <img src="assets/logo-color.webp" alt="">
+  <h1>Teachers · Student Marks</h1>
+  <a href="./">View website →</a>
+</header>
+<main>
+  <section class="card" id="loginCard">
+    <h2>Teacher sign in</h2>
+    <form id="loginForm" class="grid" style="max-width:520px">
+      <label class="full">Username<input id="l-user" autocomplete="username" required></label>
+      <label class="full">Password<input id="l-pass" type="password" autocomplete="current-password" required></label>
+      <div class="row full"><button id="loginBtn">Sign in</button></div>
+    </form>
+    <p id="loginMsg"></p>
+  </section>
+
+  <div id="app" hidden>
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <span class="help" id="who"></span>
+      <button class="ghost" id="logoutBtn">Sign out</button>
+    </div>
+    <section class="card">
+      <div class="grid">
+        <label>Exam<select id="exam"></select></label>
+        <label>Class<select id="cls"></select></label>
+        <label class="full">Search<input id="q" placeholder="Name or admission number"></label>
+      </div>
+      <p class="help" id="count" style="margin-top:12px"></p>
+      <div style="overflow:auto;max-height:640px;border:1px solid var(--line);border-radius:10px"><table class="x-table" id="tbl"></table></div>
+      <div class="row" style="margin-top:12px"><button class="ghost" id="csvBtn">Download Excel (CSV)</button><button class="ghost" onclick="window.print()">Print</button></div>
+    </section>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const u8 = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+const tob64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+function say(el, text, ok) { el.className = "msg " + (ok ? "ok" : "err"); el.textContent = text; }
+const get = async (path) => { const r = await fetch(path + "?t=" + Date.now(), { cache: "no-store" }); if (!r.ok) throw new Error("load"); return r.json(); };
+let dataKey = null, exams = [], cur = null;
+
+async function deriveKey(user, pass, salt, iter) {
+  const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(user.trim().toLowerCase() + "\n" + pass), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: iter, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+}
+async function unseal(b) {
+  const k = await crypto.subtle.importKey("raw", u8(dataKey), "AES-GCM", false, ["decrypt"]);
+  return JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(b.iv) }, k, u8(b.ct))));
+}
+
+async function start() {
+  const raw = await get("data/results/index.json");
+  exams = Array.isArray(raw) ? [] : (await unseal(raw)).slice().reverse();
+  $("loginCard").hidden = true; $("app").hidden = false;
+  $("exam").innerHTML = exams.length ? exams.map((e) => `<option value="${esc(e.id)}">${esc(e.title)}</option>`).join("") : `<option value="">No results saved yet</option>`;
+  if (exams.length) await openExam();
+}
+async function openExam() {
+  const e = exams.find((x) => x.id === $("exam").value); if (!e) return;
+  $("count").textContent = "Loading…";
+  cur = await unseal(await get(`data/results/${e.id}.json`));
+  cur.title = e.title;
+  const ci = cur.columns.findIndex((c) => c.role === "class");
+  const classes = ci < 0 ? [] : [...new Set(cur.rows.map((r) => String(r[ci]).trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  $("cls").innerHTML = `<option value="">All classes</option>` + classes.map((c) => `<option>${esc(c)}</option>`).join("");
+  $("cls").disabled = !classes.length;
+  render();
+}
+function visible() {
+  const ci = cur.columns.findIndex((c) => c.role === "class"), cls = $("cls").value, q = $("q").value.trim().toLowerCase();
+  return cur.rows.filter((r) => (!cls || String(r[ci]).trim() === cls) && (!q || r.some((c) => String(c).toLowerCase().includes(q))));
+}
+function render() {
+  const rows = visible();
+  $("count").textContent = `${rows.length} students`;
+  $("tbl").innerHTML = `<thead><tr>${cur.columns.map((c) => `<th>${esc(c.name)}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody>`;
+}
+$("exam").onchange = openExam; $("cls").onchange = render; $("q").oninput = render;
+$("csvBtn").onclick = () => {
+  const q = (v) => `"${String(v).replace(/"/g, '""')}"`;
+  const csv = "\ufeff" + [cur.columns.map((c) => q(c.name)).join(","), ...visible().map((r) => r.map(q).join(","))].join("\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = (cur.title + ($("cls").value ? " " + $("cls").value : "")).replace(/[^\w\- ]+/g, "") + ".csv"; a.click();
+};
+
+$("loginForm").onsubmit = async (ev) => {
+  ev.preventDefault(); $("loginBtn").disabled = true;
+  try {
+    const user = $("l-user").value.trim().toLowerCase();
+    const list = await get("data/teachers.json").catch(() => []);
+    const t = list.find((x) => x.u === user);
+    if (!t) throw new Error("Wrong username or password.");
+    try {
+      const key = await deriveKey(user, $("l-pass").value, u8(t.salt), t.iter);
+      dataKey = new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: u8(t.iv) }, key, u8(t.ct)));
+    } catch (e) { throw new Error("Wrong username or password."); }
+    try { sessionStorage.setItem("tcc-teacher", JSON.stringify({ k: dataKey, n: t.name })); } catch (e) {}
+    $("who").textContent = "Signed in as " + t.name; $("l-pass").value = "";
+    await start();
+  } catch (err) { say($("loginMsg"), err.message === "load" ? "Could not load the results. Try again." : err.message, false); }
+  $("loginBtn").disabled = false;
+};
+$("logoutBtn").onclick = () => { try { sessionStorage.removeItem("tcc-teacher"); } catch (e) {} location.reload(); };
+try { const s = JSON.parse(sessionStorage.getItem("tcc-teacher") || "null"); if (s) { dataKey = s.k; $("who").textContent = "Signed in as " + s.n; start().catch(() => { sessionStorage.removeItem("tcc-teacher"); location.reload(); }); } } catch (e) {}
+</script>
+</body>
+</html>
