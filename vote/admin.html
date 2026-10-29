@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="si">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Election Admin</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="../assets/logo-color.webp">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<style>
+  main { display: grid; gap: 22px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; align-items: end; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .stat { background: var(--chip); border-radius: 14px; padding: 14px 18px; }
+  .stat b { display: block; font-size: 2rem; color: var(--maroon); line-height: 1.1; }
+  .res { display: grid; gap: 10px; }
+  .res-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 90px; gap: 14px; align-items: center; }
+  .res-row img, .res-row .ph { width: 64px; height: 80px; object-fit: cover; border-radius: 10px; background: var(--chip); display: grid; place-items: center; color: var(--maroon); font-weight: 700; }
+  .barwrap { background: var(--chip); border-radius: 8px; height: 14px; overflow: hidden; margin-top: 6px; }
+  .bar { height: 100%; background: linear-gradient(90deg, var(--maroon), var(--gold)); }
+  .res-row .n { text-align: right; font-size: 1.6rem; font-weight: 700; color: var(--maroon); }
+  .res-row .n small { display: block; font-size: .8rem; color: var(--muted); font-weight: 400; }
+  .lead { border: 2px solid var(--gold); border-radius: 14px; padding: 8px; background: #fffbef; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+  th, td { border-bottom: 1px solid var(--line); padding: 7px 10px; text-align: left; }
+  th { position: sticky; top: 0; background: #fff; }
+  .scroll { max-height: 420px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+  .clist { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+  .clist .cand { cursor: default; }
+  .pill { display: inline-block; border-radius: 999px; padding: 4px 14px; font-weight: 700; }
+  .pill.on { background: #e7f4ea; color: #1e5b2b; } .pill.off { background: #fbe9e7; color: #8c1d18; }
+</style>
+</head>
+<body>
+<header class="bar">
+  <img src="../assets/logo-color.webp" alt="">
+  <h1>Election Admin<small>ශිෂ්‍ය පාර්ලිමේන්තු ඡන්දය · පාලක පුවරුව</small></h1>
+  <span class="right row"><a class="btn ghost" href="./" target="_blank" style="background:#fff;color:var(--maroon)">Voting screen</a></span>
+</header>
+<main>
+  <section class="card" id="login" hidden>
+    <h2 id="lt">Sign in</h2>
+    <p class="help" id="lh">Enter the admin password.</p>
+    <form id="lf" class="row"><input id="em" type="email" placeholder="Email" style="max-width:280px" required><input id="pw" type="password" placeholder="Password" style="max-width:240px" required><button>Sign in</button></form>
+    <p id="lm" class="msg err" hidden></p>
+  </section>
+
+  <div id="app" hidden style="display:grid;gap:22px">
+    <!-- Results -->
+    <section class="card">
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">ප්‍රතිඵල · Live results</h2><span class="row"><span id="openPill" class="pill"></span><button id="openBtn" class="gold"></button></span></div>
+      <div class="stats" style="margin:16px 0">
+        <div class="stat"><span class="help">ඡන්ද දුන් ගණන · Voted</span><b id="sVoted">0</b></div>
+        <div class="stat"><span class="help">ඡන්ද දායකයින් · Voters</span><b id="sVoters">0</b></div>
+        <div class="stat"><span class="help">ප්‍රතිශතය · Turnout</span><b id="sTurn">0%</b></div>
+      </div>
+      <div class="res" id="res"></div>
+      <p class="help" id="addr" style="margin-top:16px">Students vote at <b id="voteurl"></b></p>
+    </section>
+
+    <!-- Candidates -->
+    <section class="card">
+      <h2>අපේක්ෂකයින් · Candidates</h2>
+      <form id="cf" class="grid">
+        <input type="hidden" id="c-id">
+        <label>අපේක්ෂක අංකය · Number<input id="c-no" required></label>
+        <label>නම · Name<input id="c-name" required></label>
+        <label>පන්තිය · Class<input id="c-class"></label>
+        <label>ඡායාරූපය · Photo<input id="c-photo" type="file" accept="image/*"></label>
+        <div class="row"><button id="c-save">Add candidate</button><button type="button" class="ghost" id="c-cancel" hidden>Cancel</button></div>
+      </form>
+      <p id="cm" class="msg" hidden></p>
+      <div class="clist" id="clist" style="margin-top:16px"></div>
+    </section>
+
+    <!-- Students -->
+    <section class="card">
+      <h2>ඡන්ද දායකයින් · Students</h2>
+      <p class="help">Upload an Excel (.xlsx, .xls) or CSV file. The name, class and index/admission number columns are found automatically. Only students on this list can vote. If the file also has a <b>PIN</b> column, each student must enter their PIN too. Students with the same number are updated, not added twice.</p>
+      <div class="row">
+        <input id="s-file" type="file" accept=".xlsx,.xls,.csv" style="max-width:340px">
+        <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="s-replace" style="width:auto"> Replace the current list (students who already voted are kept)</label>
+        <button id="s-up">Upload</button>
+      </div>
+      <p id="sm" class="msg" hidden></p>
+      <details style="margin-top:14px"><summary style="cursor:pointer;font-weight:600;color:var(--maroon)">Add one student</summary>
+        <form id="vf" class="grid" style="margin-top:10px">
+          <label>Admission / index no.<input id="v-id" required></label><label>Name<input id="v-name" required></label><label>Class<input id="v-class"></label><label>PIN (optional)<input id="v-pin"></label><button>Add</button>
+        </form>
+      </details>
+      <div class="row" style="margin-top:16px"><input id="q" placeholder="Search name, number or class" style="max-width:320px"><span class="help" id="vcount"></span></div>
+      <div class="scroll" style="margin-top:10px"><table><thead><tr><th>No.</th><th>Name</th><th>Class</th><th>Voted</th></tr></thead><tbody id="vt"></tbody></table></div>
+      <h3 style="color:var(--maroon);margin:20px 0 8px">පන්ති අනුව · By class</h3>
+      <div class="scroll"><table><thead><tr><th>Class</th><th>Students</th><th>Voted</th><th>%</th></tr></thead><tbody id="ct"></tbody></table></div>
+    </section>
+
+    <!-- Settings -->
+    <section class="card">
+      <h2>Settings</h2>
+      <div class="grid">
+        <label>Election name<input id="t-title"></label><button class="ghost" id="t-save">Save name</button>
+        <button class="ghost" id="logout">Sign out</button>
+      </div>
+      <h3 style="color:#b3261e;margin:22px 0 8px">Reset</h3>
+      <p class="help">Type RESET and press a button. "Clear votes" keeps students and candidates. "Delete everything" starts fresh.</p>
+      <div class="row"><input id="r-confirm" placeholder="RESET" style="max-width:160px"><button class="danger" id="r-votes">Clear votes</button><button class="danger" id="r-all">Delete everything</button></div>
+      <p id="tm" class="msg" hidden></p>
+    </section>
+  </div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const say = (el, t, ok) => { el.hidden = false; el.textContent = t; el.className = "msg " + (ok ? "ok" : "err"); };
+const SB = window.EL_CONFIG.url ? supabase.createClient(EL_CONFIG.url, EL_CONFIG.anonKey) : null;
+const photo = (c) => c.photo_url ? `<img src="${esc(c.photo_url)}" alt="">` : `<div class="ph">${esc(c.number)}</div>`;
+const norm = (v) => { let s = String(v ?? "").replace(/\s+/g, "").toUpperCase().replace(/\.0$/, ""); return s.replace(/^0+(?=.)/, ""); };
+let OPEN = false, VOTERS = [], CANDS = [];
+$("voteurl").textContent = new URL("./", location.href).href;
+
+async function guard() {
+  if (!SB) { $("login").hidden = false; $("lt").textContent = "Not set up yet"; $("lh").textContent = "Fill in vote/config.js with the Supabase project URL and anon key (see vote/SETUP.md)."; $("lf").hidden = true; return false; }
+  const { data } = await SB.auth.getSession();
+  if (!data.session) { $("login").hidden = false; $("app").hidden = true; return false; }
+  const { data: isAdmin } = await SB.rpc("el_is_admin");
+  if (!isAdmin) { $("login").hidden = false; $("app").hidden = true; say($("lm"), "This account is not an election admin.", false); await SB.auth.signOut(); return false; }
+  $("login").hidden = true; $("app").hidden = false; return true;
+}
+async function fetchAll(table, cols) { // Supabase returns 1000 rows at a time
+  let out = [], from = 0;
+  for (;;) { const { data, error } = await SB.from(table).select(cols).range(from, from + 999); if (error) throw error; out = out.concat(data); if (data.length < 1000) return out; from += 1000; }
+}
+async function load() {
+  const [res, set] = await Promise.all([SB.rpc("el_results"), SB.from("el_settings").select("*").eq("id", 1).single()]);
+  if (res.error) return;
+  CANDS = res.data; OPEN = set.data.open;
+  VOTERS = await fetchAll("el_voters", "idx, name, class, pin, voted, voted_at");
+  const voted = VOTERS.filter((v) => v.voted).length, max = Math.max(1, ...CANDS.map((c) => +c.votes)), total = CANDS.reduce((a, c) => a + +c.votes, 0);
+  $("sVoted").textContent = voted; $("sVoters").textContent = VOTERS.length; $("sTurn").textContent = VOTERS.length ? Math.round(voted * 100 / VOTERS.length) + "%" : "0%";
+  $("openPill").textContent = OPEN ? "ඡන්දය විවෘතයි · OPEN" : "ඡන්දය වසා ඇත · CLOSED"; $("openPill").className = "pill " + (OPEN ? "on" : "off");
+  $("openBtn").textContent = OPEN ? "Close voting" : "Open voting";
+  $("res").innerHTML = CANDS.length ? CANDS.map((c, i) => `<div class="res-row ${i === 0 && c.votes > 0 ? "lead" : ""}">${photo(c)}<div><b>No. ${esc(c.number)} · ${esc(c.name)}</b> <span class="help">${esc(c.class)}</span><div class="barwrap"><div class="bar" style="width:${c.votes * 100 / max}%"></div></div></div><div class="n">${c.votes}<small>${total ? Math.round(c.votes * 100 / total) : 0}%</small></div></div>`).join("") : `<p class="help">Add candidates below.</p>`;
+  const byClass = {}; VOTERS.forEach((v) => { const k = v.class || "-"; byClass[k] ||= { t: 0, v: 0 }; byClass[k].t++; if (v.voted) byClass[k].v++; });
+  $("ct").innerHTML = Object.keys(byClass).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).map((k) => `<tr><td>${esc(k)}</td><td>${byClass[k].t}</td><td>${byClass[k].v}</td><td>${Math.round(byClass[k].v * 100 / byClass[k].t)}%</td></tr>`).join("");
+  if (document.activeElement !== $("t-title")) $("t-title").value = set.data.title;
+  const sorted = CANDS.slice().sort((a, b) => String(a.number).localeCompare(String(b.number), undefined, { numeric: true }));
+  $("clist").innerHTML = sorted.map((c) => `<div class="cand">${photo(c)}<span class="no">${esc(c.number)}</span><b>${esc(c.name)}</b><small>${esc(c.class)}</small><div class="row" style="justify-content:center"><button class="ghost" data-edit="${c.id}">Edit</button><button class="danger" data-del="${c.id}">Delete</button></div></div>`).join("");
+  renderVoters();
+}
+function renderVoters() {
+  const q = $("q").value.trim().toLowerCase();
+  const list = VOTERS.filter((v) => !q || `${v.idx} ${v.name} ${v.class}`.toLowerCase().includes(q)).sort((a, b) => `${a.class} ${a.name}`.localeCompare(`${b.class} ${b.name}`));
+  $("vcount").textContent = `${list.length} students`;
+  $("vt").innerHTML = list.slice(0, 500).map((v) => `<tr><td>${esc(v.idx)}</td><td>${esc(v.name)}</td><td>${esc(v.class)}</td><td>${v.voted ? "✓ " + new Date(v.voted_at).toLocaleString() : ""}</td></tr>`).join("");
+}
+$("q").oninput = renderVoters;
+
+$("lf").onsubmit = async (e) => {
+  e.preventDefault();
+  const { error } = await SB.auth.signInWithPassword({ email: $("em").value.trim(), password: $("pw").value });
+  if (error) return say($("lm"), "Wrong email or password.", false);
+  $("pw").value = ""; if (await guard()) load();
+};
+$("logout").onclick = async () => { await SB.auth.signOut(); location.reload(); };
+$("openBtn").onclick = async () => { await SB.from("el_settings").update({ open: !OPEN }).eq("id", 1); load(); };
+
+$("cf").onsubmit = async (e) => {
+  e.preventDefault(); $("c-save").disabled = true;
+  try {
+    const row = { number: $("c-no").value.trim(), name: $("c-name").value.trim(), class: $("c-class").value.trim() };
+    const f = $("c-photo").files[0];
+    if (f) {
+      const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${(f.name.split(".").pop() || "jpg").toLowerCase()}`;
+      const up = await SB.storage.from("el-photos").upload(path, f, { contentType: f.type });
+      if (up.error) throw up.error;
+      row.photo_url = SB.storage.from("el-photos").getPublicUrl(path).data.publicUrl;
+    }
+    const r = $("c-id").value ? await SB.from("el_candidates").update(row).eq("id", +$("c-id").value) : await SB.from("el_candidates").insert(row);
+    if (r.error) throw r.error;
+    say($("cm"), "Saved.", true); cReset(); load();
+  } catch (err) { say($("cm"), err.message, false); }
+  $("c-save").disabled = false;
+};
+function cReset() { for (const k of ["c-id", "c-no", "c-name", "c-class", "c-photo"]) $(k).value = ""; $("c-save").textContent = "Add candidate"; $("c-cancel").hidden = true; }
+$("c-cancel").onclick = cReset;
+$("clist").onclick = async (e) => {
+  const ed = e.target.closest("[data-edit]"), del = e.target.closest("[data-del]");
+  if (ed) { const c = CANDS.find((x) => x.id == ed.dataset.edit); $("c-id").value = c.id; $("c-no").value = c.number; $("c-name").value = c.name; $("c-class").value = c.class; $("c-save").textContent = "Save changes"; $("c-cancel").hidden = false; $("cf").scrollIntoView({ behavior: "smooth" }); }
+  if (del) {
+    if (del.dataset.c !== "1") { del.dataset.c = "1"; del.textContent = "Click again"; return; }
+    const r = await SB.from("el_candidates").delete().eq("id", +del.dataset.del);
+    if (r.error) say($("cm"), r.error.message.includes("foreign key") ? "This candidate already has votes. Clear votes first." : r.error.message, false); load();
+  }
+};
+
+/* ----- Student list upload ----- */
+const HEAD = { idx: /index|admission|adm\.?\s*no|^adm|reg|ඇතුළත්|ඇතුලත්|විභාග\s*අංක|^id$|id\s*no/i, name: /name|නම/i, class: /class|grade|පන්ති|ශ්‍රේණි/i, pin: /\bpin\b|password|රහස්/i };
+function parseStudents(rows) {
+  let h = -1, col = {};
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    const c = {}; rows[i].forEach((v, j) => { const t = String(v).trim(); for (const k of ["pin", "idx", "name", "class"]) if (c[k] === undefined && !Object.values(c).includes(j) && HEAD[k].test(t)) c[k] = j; });
+    if (c.idx !== undefined && c.name !== undefined) { h = i; col = c; break; }
+  }
+  if (h < 0) throw new Error("Could not find the name and index/admission number columns. Add a heading row such as: Index No | Name | Class");
+  const out = new Map();
+  for (const r of rows.slice(h + 1)) {
+    const idx = norm(r[col.idx]), name = String(r[col.name] ?? "").trim();
+    if (!idx || !name || HEAD.name.test(name)) continue;
+    out.set(idx, { idx, name, class: col.class !== undefined ? String(r[col.class] ?? "").trim() : "", pin: col.pin !== undefined ? (String(r[col.pin] ?? "").trim() || null) : null });
+  }
+  return { list: [...out.values()], heads: { idx: rows[h][col.idx], name: rows[h][col.name], class: col.class !== undefined ? rows[h][col.class] : null, pin: col.pin !== undefined ? rows[h][col.pin] : null } };
+}
+$("s-up").onclick = async () => {
+  const f = $("s-file").files[0]; if (!f) return say($("sm"), "Choose a file first.", false);
+  $("s-up").disabled = true;
+  try {
+    const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
+    let rows = []; wb.SheetNames.forEach((n) => { rows = rows.concat(XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: false, defval: "" })); });
+    const { list, heads } = parseStudents(rows);
+    if ($("s-replace").checked) { const d = await SB.from("el_voters").delete().eq("voted", false); if (d.error) throw d.error; }
+    for (let i = 0; i < list.length; i += 500) {
+      say($("sm"), `Saving ${Math.min(i + 500, list.length)} of ${list.length}…`, true);
+      const r = await SB.from("el_voters").upsert(list.slice(i, i + 500), { onConflict: "idx", ignoreDuplicates: false });
+      if (r.error) throw r.error;
+    }
+    say($("sm"), `Registered ${list.length} students. Columns used: number = "${heads.idx}", name = "${heads.name}"${heads.class ? `, class = "${heads.class}"` : " (no class column found)"}${heads.pin ? `, PIN = "${heads.pin}"` : ""}.`, true);
+    $("s-file").value = ""; load();
+  } catch (err) { say($("sm"), err.message, false); }
+  $("s-up").disabled = false;
+};
+$("vf").onsubmit = async (e) => {
+  e.preventDefault();
+  const r = await SB.from("el_voters").upsert({ idx: norm($("v-id").value), name: $("v-name").value.trim(), class: $("v-class").value.trim(), pin: $("v-pin").value.trim() || null }, { onConflict: "idx" });
+  if (r.error) return say($("sm"), r.error.message, false);
+  for (const k of ["v-id", "v-name", "v-class", "v-pin"]) $(k).value = ""; say($("sm"), "Student added.", true); load();
+};
+$("t-save").onclick = async () => { await SB.from("el_settings").update({ title: $("t-title").value.trim() || "Student Parliament Election" }).eq("id", 1); say($("tm"), "Saved.", true); load(); };
+for (const [id, everything] of [["r-votes", false], ["r-all", true]]) $(id).onclick = async () => {
+  if ($("r-confirm").value.trim() !== "RESET") return say($("tm"), "Type RESET to confirm.", false);
+  const r = await SB.rpc("el_reset", { p_everything: everything });
+  say($("tm"), r.error ? r.error.message : (everything ? "Everything deleted." : "Votes cleared."), !r.error); $("r-confirm").value = ""; load();
+};
+guard().then((ok) => { if (ok) load(); });
+setInterval(() => { if (!$("app").hidden) load(); }, 8000);
+</script>
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="si">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Student Parliament Election</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="../assets/logo-color.webp">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<style>
+  body { min-height: 100vh; display: flex; flex-direction: column; user-select: none; }
+  main { flex: 1; width: 100%; }
+  .center { max-width: 560px; margin: 6vh auto 0; text-align: center; display: grid; gap: 18px; }
+  .center input { font-size: 2rem; text-align: center; letter-spacing: .08em; padding: 16px; }
+  .big { font-size: 1.3rem; padding: 14px 40px; }
+  .who { display: flex; gap: 18px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: #fff; border: 1px solid var(--line); border-left: 8px solid var(--gold); border-radius: 14px; padding: 14px 20px; margin-bottom: 20px; }
+  .who b { font-size: 1.4rem; color: var(--maroon); display: block; }
+  .pick { display: flex; gap: 10px; align-items: center; }
+  .pick input { width: 120px; font-size: 1.3rem; text-align: center; }
+  dialog { border: 0; border-radius: 20px; padding: 0; max-width: 460px; width: 92vw; box-shadow: 0 30px 80px rgba(0,0,0,.4); }
+  dialog::backdrop { background: rgba(43,10,12,.6); }
+  .confirm { padding: 26px; display: grid; gap: 14px; text-align: center; justify-items: center; }
+  .confirm img, .confirm .ph { width: 200px; aspect-ratio: 4/5; object-fit: cover; border-radius: 14px; border: 4px solid var(--gold); background: var(--chip); display: grid; place-items: center; font-size: 3rem; color: var(--maroon); }
+  .confirm h3 { margin: 0; font-size: 1.5rem; color: var(--maroon); }
+  .done { text-align: center; margin-top: 12vh; display: grid; gap: 12px; justify-items: center; }
+  .done .tick { width: 120px; height: 120px; border-radius: 50%; background: #2e7d32; color: #fff; font-size: 4rem; display: grid; place-items: center; }
+  .closed { text-align: center; margin-top: 14vh; color: var(--muted); }
+</style>
+</head>
+<body>
+<header class="bar">
+  <img src="../assets/logo-color.webp" alt="">
+  <h1><span id="title">Student Parliament Election</span><small>MR/ Thelijjawila Central College · ශිෂ්‍ය පාර්ලිමේන්තු ඡන්දය</small></h1>
+</header>
+<main>
+  <!-- 1. enter number -->
+  <section id="s1" class="center">
+    <h2 style="font-size:1.8rem;margin:0">ඔබේ ඇතුළත්වීමේ අංකය ඇතුළත් කරන්න</h2>
+    <p class="help" style="margin:0">Enter your admission / index number</p>
+    <form id="f1" class="center" style="margin:0">
+      <input id="vid" autocomplete="off" inputmode="text" autofocus required>
+      <label id="pinw" hidden style="text-align:left">ඔබේ PIN අංකය · Your PIN<input id="pin" autocomplete="off" inputmode="numeric" style="font-size:1.5rem;text-align:center"></label>
+      <button class="big">ඉදිරියට · Next</button>
+    </form>
+    <p id="m1" class="msg err" hidden></p>
+  </section>
+
+  <!-- 2. choose candidate -->
+  <section id="s2" hidden>
+    <div class="who">
+      <div><span class="help">ඡන්දදායකයා · Voter</span><b id="vname"></b><span id="vclass" class="help"></span></div>
+      <div class="pick"><span class="help">අපේක්ෂක අංකය</span><input id="cno" inputmode="numeric" placeholder="No."><button class="ghost" id="cancel">අවලංගු කරන්න</button></div>
+    </div>
+    <h2>ඔබ කැමති අපේක්ෂකයාගේ ඡායාරූපය මත ක්ලික් කරන්න</h2>
+    <div class="cands" id="cands"></div>
+  </section>
+
+  <!-- 3. thank you -->
+  <section id="s3" class="done" hidden>
+    <div class="tick">✓</div>
+    <h2 style="font-size:2rem">ඔබේ ඡන්දය සාර්ථකව ලැබුණා. ස්තුතියි!</h2>
+    <p class="help">Your vote has been recorded. Thank you!</p>
+  </section>
+
+  <section id="closed" class="closed" hidden>
+    <h2>ඡන්දය දැනට විවෘත නැත</h2>
+    <p>Voting is not open right now.</p>
+  </section>
+</main>
+
+<dialog id="dlg">
+  <div class="confirm">
+    <span class="help">ඔබ ඡන්දය දෙන්නේ · You are voting for</span>
+    <div id="dphoto"></div>
+    <h3 id="dname"></h3>
+    <span id="dno" class="help"></span>
+    <div class="row" style="justify-content:center">
+      <button class="gold big" id="ok">තහවුරු කරන්න · Confirm</button>
+      <button class="ghost" id="back">ආපසු · Back</button>
+    </div>
+    <p id="m2" class="msg err" hidden></p>
+  </div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const SB = window.EL_CONFIG.url ? supabase.createClient(EL_CONFIG.url, EL_CONFIG.anonKey) : null;
+const ERR = {
+  CLOSED: "ඡන්දය දැනට විවෘත නැත. · Voting is not open.",
+  NOT_FOUND: "මෙම අංකය ලියාපදිංචි කර නැත. · This number is not registered.",
+  BAD_PIN: "PIN අංකය වැරදියි. · Wrong PIN.",
+  ALREADY_VOTED: "මෙම අංකයෙන් දැනටමත් ඡන්දය දී ඇත. · Already voted.",
+  NO_CANDIDATE: "අපේක්ෂකයෙකු තෝරන්න. · Choose a candidate.",
+};
+const errText = (e) => { const m = (e && e.message) || ""; const k = Object.keys(ERR).find((k) => m.includes(k)); return k ? ERR[k] : "සම්බන්ධ වීමේ දෝෂයකි. නැවත උත්සාහ කරන්න. · Connection problem, try again."; };
+let state = { candidates: [], open: false }, voter = null, chosen = null, idle, openedAt = 0;
+const photo = (c) => c.photo_url ? `<img src="${esc(c.photo_url)}" alt="">` : `<div class="ph">${esc(c.number || "?")}</div>`;
+
+function show(id) { for (const s of ["s1", "s2", "s3", "closed"]) $(s).hidden = s !== id; }
+function reset() {
+  voter = null; chosen = null; $("vid").value = ""; $("pin").value = ""; $("pinw").hidden = true; $("cno").value = ""; $("m1").hidden = true;
+  if ($("dlg").open) $("dlg").close();
+  refresh().then(() => { show(state.open ? "s1" : "closed"); if (state.open) $("vid").focus(); });
+}
+function poke() { clearTimeout(idle); if (voter) idle = setTimeout(reset, 180000); }
+document.addEventListener("pointerdown", poke); document.addEventListener("keydown", poke);
+
+async function refresh() {
+  if (!SB) { $("closed").querySelector("p").textContent = "The online election is not set up yet."; return; }
+  const [s, c] = await Promise.all([SB.from("el_settings").select("title, open").eq("id", 1).single(), SB.from("el_candidates").select("id, number, name, class, photo_url")]);
+  if (s.data) state.open = s.data.open, $("title").textContent = s.data.title;
+  if (c.data) state.candidates = c.data.sort((a, b) => String(a.number).localeCompare(String(b.number), undefined, { numeric: true }));
+  $("cands").innerHTML = state.candidates.map((c) => `<button class="cand" data-id="${c.id}">${photo(c)}<span class="no">${esc(c.number)}</span><b>${esc(c.name)}</b><small>${esc(c.class)}</small></button>`).join("");
+}
+$("f1").onsubmit = async (e) => {
+  e.preventDefault();
+  const { data, error } = await SB.rpc("el_lookup", { p_idx: $("vid").value, p_pin: $("pin").value || null });
+  if (error) {
+    if (error.message.includes("BAD_PIN") && $("pinw").hidden) { $("pinw").hidden = false; $("m1").textContent = "ඔබේ PIN අංකයත් ඇතුළත් කරන්න. · Enter your PIN too."; $("m1").hidden = false; $("pin").focus(); return; }
+    $("m1").textContent = errText(error); $("m1").hidden = false; return;
+  }
+  const r = data[0];
+  voter = { id: $("vid").value, pin: $("pin").value || null };
+  $("vname").textContent = r.name; $("vclass").textContent = r.class ? "පන්තිය · Class " + r.class : "";
+  await refresh(); show("s2"); poke(); window.scrollTo(0, 0);
+};
+function choose(c) {
+  if (!c) return;
+  chosen = c; $("dphoto").innerHTML = photo(c); $("dname").textContent = c.name; $("dno").textContent = "අපේක්ෂක අංකය · No. " + c.number + (c.class ? " · " + c.class : "");
+  $("m2").hidden = true; openedAt = Date.now(); $("dlg").showModal(); $("back").focus();
+}
+$("cands").onclick = (e) => { const b = e.target.closest(".cand"); if (b) choose(state.candidates.find((c) => c.id == b.dataset.id)); };
+$("cno").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); const c = state.candidates.find((c) => String(c.number).trim() === $("cno").value.trim()); if (!c) { $("cno").select(); return; } setTimeout(() => choose(c), 0); } };
+$("back").onclick = () => $("dlg").close();
+$("cancel").onclick = reset;
+$("ok").onclick = async () => {
+  if (Date.now() - openedAt < 600) return;
+  $("ok").disabled = true;
+  const { error } = await SB.rpc("el_vote", { p_idx: voter.id, p_pin: voter.pin, p_candidate: chosen.id });
+  $("ok").disabled = false;
+  if (error) { $("m2").textContent = errText(error); $("m2").hidden = false; return; }
+  $("dlg").close(); show("s3"); voter = null; setTimeout(reset, 5000);
+};
+setInterval(() => { if (!voter && $("s3").hidden) refresh().then(() => show(state.open ? "s1" : "closed")); }, 20000);
+reset();
+</script>
+</body>
+</html>
