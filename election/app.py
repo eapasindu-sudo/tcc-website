@@ -9,7 +9,7 @@ One program that:
 Votes are secret: the database records THAT a student voted, never WHO they voted for.
 Data is stored in the folder "TCC-Election-Data" next to the program.
 """
-import base64, csv, re, subprocess, hashlib, hmac, io, json, os, secrets, socket, sqlite3, sys, threading, time, webbrowser
+import base64, csv, re, subprocess, hashlib, hmac, io, json, os, secrets, socket, sqlite3, sys, threading, time, urllib.request, webbrowser
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
@@ -22,6 +22,118 @@ os.makedirs(PHOTOS, exist_ok=True)
 DB_PATH = os.path.join(DATA, "election.db")
 LOCK = threading.Lock()
 SESSIONS = {}  # admin session token -> expiry
+MASTER_PIN = "7274"  # installs the admin version, unlocks the admin panel, closes the program (until a close PIN is set)
+FIND_PORT = 8766     # UDP: voting PCs find the admin PC on the network
+LOCAL_PORT = int(os.environ.get("TCC_ELECTION_LOCAL_PORT", "8767"))  # setup / "connecting" screen on a voting PC
+CONF_PATH = os.path.join(DATA, "install.json")
+POSTS = os.path.join(DATA, "posts")
+
+
+def load_conf():
+    if os.environ.get("TCC_ELECTION_MODE"):
+        return {"mode": os.environ["TCC_ELECTION_MODE"], "pc": os.environ.get("TCC_ELECTION_PC", "PC01"), "server": os.environ.get("TCC_ELECTION_SERVER", "")}
+    try:
+        with open(CONF_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+CONF = {"c": load_conf()}
+
+
+def save_conf(c):
+    with open(CONF_PATH, "w", encoding="utf-8") as f:
+        json.dump(c, f)
+    CONF["c"] = c
+
+
+# ---------- Network: voting PCs find the admin PC by themselves ----------
+def find_responder():
+    """Admin PC answers "where is the election?" broadcasts from voting PCs."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(("0.0.0.0", FIND_PORT))
+    except OSError as e:
+        print("Network finder not started:", e)
+        return
+    while True:
+        try:
+            msg, addr = s.recvfrom(256)
+            if msg == b"TCC-ELECTION?":
+                s.sendto(f"TCC-ELECTION:{PORT}:{socket.gethostname()}".encode(), addr)
+        except OSError:
+            time.sleep(1)
+
+
+def discover(wait=1.5):
+    found = {}
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    s.settimeout(0.3)
+    targets = {"255.255.255.255"}
+    for a in addresses():
+        ip = a.split("//")[1].split(":")[0]
+        targets.add(ip.rsplit(".", 1)[0] + ".255")
+    end = time.time() + wait
+    sent = 0
+    while time.time() < end:
+        if sent < 3:
+            for t in targets:
+                try:
+                    s.sendto(b"TCC-ELECTION?", (t, FIND_PORT))
+                except OSError:
+                    pass
+            sent += 1
+        try:
+            msg, addr = s.recvfrom(256)
+            parts = msg.decode(errors="replace").split(":")
+            if parts[0] == "TCC-ELECTION":
+                found[addr[0]] = {"ip": addr[0], "port": int(parts[1]), "name": parts[2] if len(parts) > 2 else addr[0]}
+        except (socket.timeout, OSError, ValueError, IndexError):
+            pass
+    s.close()
+    return list(found.values())
+
+
+def server_ok(server):
+    try:
+        with urllib.request.urlopen(f"http://{server}/api/state", timeout=2) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
+def setup_network():
+    """Windows: open the firewall for the election and mark the network private. Windows shows one "allow" popup."""
+    if os.name != "nt":
+        return False
+    script = ("Remove-NetFirewallRule -DisplayName 'TCC Election*' -ErrorAction SilentlyContinue; "
+              f"New-NetFirewallRule -DisplayName 'TCC Election' -Direction Inbound -Action Allow -Protocol TCP -LocalPort {PORT} -Profile Any; "
+              f"New-NetFirewallRule -DisplayName 'TCC Election Find' -Direction Inbound -Action Allow -Protocol UDP -LocalPort {FIND_PORT} -Profile Any; "
+              "Get-NetConnectionProfile | Set-NetConnectionProfile -NetworkCategory Private -ErrorAction SilentlyContinue")
+    enc = base64.b64encode(script.encode("utf-16-le")).decode()
+    try:
+        r = subprocess.run(["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command",
+                            f"Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList '-NoProfile','-EncodedCommand','{enc}'"],
+                           creationflags=0x08000000, timeout=180)
+        return r.returncode == 0
+    except Exception as e:
+        print("Network setup failed:", e)
+        return False
+
+
+def desktop_shortcut(label):
+    if os.name != "nt" or not getattr(sys, "frozen", False):
+        return
+    exe = sys.executable.replace("'", "''")
+    script = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop')+'\\" + label + ".lnk');"
+              f"$s.TargetPath='{exe}';$s.WorkingDirectory='{os.path.dirname(exe)}';$s.Save()")
+    try:
+        subprocess.run(["powershell", "-NoProfile", "-Command", script], creationflags=0x08000000, timeout=60)
+    except Exception:
+        pass
 
 
 # ---------- Internet link (Cloudflare quick tunnel) ----------
@@ -77,7 +189,7 @@ def open_voting_window(fullscreen):
     if wv is None:
         webbrowser.open(url)
         return
-    guard_close(wv.create_window("TCC Election · Voting", url, fullscreen=fullscreen, width=1200, height=820, min_size=(800, 600)))
+    guard_close(wv.create_window("TCC Election · Voting", url + "?pc=ADMIN-PC", fullscreen=fullscreen, width=1200, height=820, min_size=(800, 600), js_api=Api()))
 
 
 def db():
@@ -113,7 +225,18 @@ def backup(force=False):
 def backup_loop():
     while True:
         time.sleep(60)
+        record_turnout()
         backup(force=True)
+
+
+def record_turnout():
+    """Keep the turnout at the end of every hour (for the hourly percentage and the Facebook post)."""
+    if setting("open") != "1":
+        return
+    with db() as c:
+        t = c.execute("SELECT COUNT(*) n, SUM(voted) v FROM voters").fetchone()
+        c.execute("INSERT INTO turnout(hour,voted,voters) VALUES(?,?,?) ON CONFLICT(hour) DO UPDATE SET voted=excluded.voted, voters=excluded.voters",
+                  (time.strftime("%Y-%m-%d %H"), t["v"] or 0, t["n"]))
 
 
 # ---------- Closing the program needs the close PIN ----------
@@ -121,8 +244,30 @@ CLOSE = {"allowed": False}
 
 
 def close_pin_ok(pin):
-    stored = setting("close_pin") or setting("admin_pw")
-    return bool(stored) and check_pw(str(pin or ""), stored)
+    stored = setting("close_pin")
+    if not stored:
+        return hmac.compare_digest(str(pin or "").strip(), MASTER_PIN)
+    return check_pw(str(pin or "").strip(), stored)
+
+
+class Api:
+    """Called from the page inside the program window (window.pywebview.api)."""
+    def quit(self, pin):
+        conf = CONF["c"] or {}
+        if conf.get("mode") == "voting":
+            try:
+                req = urllib.request.Request(f"http://{conf['server']}/api/closecheck", data=json.dumps({"pin": pin}).encode(), headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    ok = r.status == 200
+            except Exception:
+                ok = hmac.compare_digest(str(pin or "").strip(), MASTER_PIN)  # admin PC unreachable: master PIN still works
+        else:
+            ok = close_pin_ok(pin)
+        if ok:
+            quit_app()
+        else:
+            time.sleep(1)
+        return ok
 
 
 def quit_app():
@@ -141,7 +286,7 @@ def quit_app():
 
 def guard_close(window):
     def closing():
-        if CLOSE["allowed"]:
+        if CLOSE["allowed"] or not CONF["c"]:
             return True
         try:
             window.evaluate_js("window.askClosePin && window.askClosePin()")
@@ -159,6 +304,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS voters (id TEXT PRIMARY KEY, name TEXT, class TEXT, voted INTEGER DEFAULT 0, voted_at TEXT, pin TEXT);
         CREATE TABLE IF NOT EXISTS candidates (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, name TEXT, class TEXT, photo TEXT);
         CREATE TABLE IF NOT EXISTS votes (id INTEGER PRIMARY KEY AUTOINCREMENT, candidate_id INTEGER);
+        CREATE TABLE IF NOT EXISTS pcs (name TEXT PRIMARY KEY, ip TEXT, last_seen REAL, votes INTEGER DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS turnout (hour TEXT PRIMARY KEY, voted INTEGER, voters INTEGER);
         """)
         if "pin" not in [r[1] for r in c.execute("PRAGMA table_info(voters)")]:
             c.execute("ALTER TABLE voters ADD COLUMN pin TEXT")
@@ -296,6 +443,9 @@ class H(BaseHTTPRequestHandler):
     def via_internet(self):
         return bool(self.headers.get("Cf-Ray") or self.headers.get("Cf-Connecting-Ip"))
 
+    def local(self):
+        return not self.via_internet() and self.client_address[0] in ("127.0.0.1", "::1")
+
     def is_admin(self):
         if self.via_internet():
             return False
@@ -315,14 +465,25 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         p = urlparse(self.path).path
+        if p in ("/setup", "/connect", "/results"):
+            if not self.local() and p != "/results" or self.via_internet():
+                return self.send(403, {"error": "Not allowed"})
+            return self.file(os.path.join(WEB, p[1:] + ".html"), "text/html; charset=utf-8")
+        if p == "/api/whoami":
+            return self.send(200, {"local": self.local(), "mode": (CONF["c"] or {}).get("mode"), "conf": CONF["c"] if self.local() else None})
+        if p == "/api/client/status":
+            conf = CONF["c"] or {}
+            if not self.local() or conf.get("mode") != "voting":
+                return self.send(403, {"error": "Not allowed"})
+            return self.send(200, client_status())
         if p in ("/", "/vote"):
             return self.file(os.path.join(WEB, "vote.html"), "text/html; charset=utf-8")
         if p == "/admin":
             if self.via_internet():
                 return self.send(403, b"<h1>The admin panel can only be opened on the school computer.</h1>", "text/html; charset=utf-8")
             return self.file(os.path.join(WEB, "admin.html"), "text/html; charset=utf-8")
-        if p in ("/logo.webp", "/style.css"):
-            return self.file(os.path.join(WEB, p[1:]), "image/webp" if p.endswith("webp") else "text/css")
+        if p in ("/logo.webp", "/style.css", "/close.js"):
+            return self.file(os.path.join(WEB, p[1:]), {"webp": "image/webp", "css": "text/css", "js": "text/javascript"}[p.rsplit(".", 1)[1]])
         if p.startswith("/photos/"):
             name = os.path.basename(p)
             ext = name.rsplit(".", 1)[-1].lower()
@@ -330,7 +491,7 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/state":
             with db() as c:
                 cands = [dict(r) for r in c.execute("SELECT id, number, name, class, photo FROM candidates ORDER BY CAST(number AS INTEGER), number")]
-            return self.send(200, {"open": setting("open") == "1", "title": setting("title", "Student Parliament Election"), "candidates": cands, "setup": setting("admin_pw") is None})
+            return self.send(200, {"open": setting("open") == "1", "title": setting("title", "Student Parliament Election"), "candidates": cands, "setup": setting("admin_pw") is None, "ended": setting("ended") == "1"})
         if p == "/api/admin/results":
             if not self.is_admin():
                 return self.send(401, {"error": "Please sign in"})
@@ -338,7 +499,11 @@ class H(BaseHTTPRequestHandler):
                 res = [dict(r) for r in c.execute("SELECT c.id, c.number, c.name, c.class, c.photo, COUNT(v.id) AS votes FROM candidates c LEFT JOIN votes v ON v.candidate_id=c.id GROUP BY c.id ORDER BY votes DESC, CAST(c.number AS INTEGER)")]
                 tot = c.execute("SELECT COUNT(*) n, SUM(voted) v FROM voters").fetchone()
                 by_class = [dict(r) for r in c.execute("SELECT class, COUNT(*) total, SUM(voted) voted FROM voters GROUP BY class ORDER BY class")]
-            return self.send(200, {"candidates": res, "voters": tot["n"], "voted": tot["v"] or 0, "byClass": by_class, "open": setting("open") == "1", "title": setting("title", "Student Parliament Election"), "addresses": addresses(),
+                now = time.time()
+                pcs = [dict(r, online=(now - (r["last_seen"] or 0)) < 15) for r in c.execute("SELECT name, ip, last_seen, votes FROM pcs ORDER BY name")]
+                hourly = [dict(r) for r in c.execute("SELECT hour, voted, voters FROM turnout ORDER BY hour")]
+            return self.send(200, {"ended": setting("ended") == "1", "pcs": pcs, "hourly": hourly, "now": time.strftime("%Y-%m-%d %H:%M"),
+                                   "candidates": res, "voters": tot["n"], "voted": tot["v"] or 0, "byClass": by_class, "open": setting("open") == "1", "title": setting("title", "Student Parliament Election"), "addresses": addresses(),
                                     "closePinSet": setting("close_pin") is not None, "backups": BACKUPS,
                                     "tunnel": {"running": bool(TUNNEL["proc"] and TUNNEL["proc"].poll() is None), "url": TUNNEL["url"], "error": TUNNEL["error"], "available": bool(cloudflared_path())}})
         if p == "/api/admin/voters":
@@ -357,6 +522,23 @@ class H(BaseHTTPRequestHandler):
             return self.send(400, {"error": "Bad request"})
 
         # ----- voting -----
+        if p == "/api/ping":
+            pc = str(data.get("pc") or "").strip()[:20]
+            if pc and not self.via_internet():
+                with LOCK, db() as c:
+                    c.execute("INSERT INTO pcs(name,ip,last_seen) VALUES(?,?,?) ON CONFLICT(name) DO UPDATE SET ip=excluded.ip, last_seen=excluded.last_seen", (pc, self.client_address[0], time.time()))
+            return self.send(200, {"ok": True, "open": setting("open") == "1"})
+        if p == "/api/closecheck":
+            if self.via_internet():
+                return self.send(403, {"error": "Not allowed"})
+            if not close_pin_ok(data.get("pin")):
+                time.sleep(1)
+                return self.send(401, {"error": "Wrong PIN"})
+            return self.send(200, {"ok": True})
+        if p.startswith("/api/setup/"):
+            if not self.local() or CONF["c"]:
+                return self.send(403, {"error": "Already installed"})
+            return self.setup_api(p, data)
         if p == "/api/lookup":
             if setting("open") != "1":
                 return self.send(403, {"error": "Voting is closed."})
@@ -386,7 +568,9 @@ class H(BaseHTTPRequestHandler):
                     return self.send(400, {"error": "Choose a candidate."})
                 c.execute("UPDATE voters SET voted=1, voted_at=? WHERE id=?", (time.strftime("%Y-%m-%d %H:%M:%S"), vid))
                 c.execute("INSERT INTO votes(candidate_id) VALUES(?)", (cid,))
-            threading.Thread(target=backup, daemon=True).start()
+                pc = "Internet link" if self.via_internet() else str(data.get("pc") or "Browser").strip()[:20]
+                c.execute("INSERT INTO pcs(name,ip,last_seen,votes) VALUES(?,?,?,1) ON CONFLICT(name) DO UPDATE SET votes=votes+1", (pc, self.client_address[0], time.time() if pc != "Internet link" else 0))
+            threading.Thread(target=lambda: (record_turnout(), backup()), daemon=True).start()
             return self.send(200, {"ok": True})
 
         # ----- closing the program (only on this computer) -----
@@ -409,6 +593,21 @@ class H(BaseHTTPRequestHandler):
                 return self.send(400, {"error": "Use at least 6 characters."})
             set_setting("admin_pw", hash_pw(data["password"]))
             p = "/api/admin/login"
+        if p == "/api/admin/unlock":
+            if not self.local():
+                return self.send(403, {"error": "Use the admin password on other computers."})
+            if not hmac.compare_digest(str(data.get("pin", "")).strip(), MASTER_PIN):
+                time.sleep(1)
+                return self.send(401, {"error": "Wrong PIN."})
+            tok = secrets.token_hex(24)
+            SESSIONS[tok] = time.time() + 8 * 3600
+            return self.send(200, {"ok": True}, headers={"Set-Cookie": f"tccadmin={tok}; Path=/; HttpOnly; SameSite=Strict"})
+        if p == "/api/admin/lock":
+            for part in (self.headers.get("Cookie") or "").split(";"):
+                k, _, v = part.strip().partition("=")
+                if k == "tccadmin":
+                    SESSIONS.pop(v, None)
+            return self.send(200, {"ok": True}, headers={"Set-Cookie": "tccadmin=; Path=/; Max-Age=0"})
         if p == "/api/admin/login":
             stored = setting("admin_pw")
             if not stored or not check_pw(data.get("password", ""), stored):
@@ -467,7 +666,35 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, {"ok": True})
         if p == "/api/admin/open":
             set_setting("open", "1" if data.get("open") else "0")
+            if data.get("open"):
+                set_setting("ended", "0")
+            record_turnout()
             return self.send(200, {"ok": True})
+        if p == "/api/admin/end":
+            record_turnout()
+            set_setting("open", "0")
+            set_setting("ended", "1")
+            backup(force=True)
+            return self.send(200, {"ok": True})
+        if p == "/api/admin/resultswin":
+            wv = WINDOWS["webview"]
+            if wv is None:
+                webbrowser.open(f"http://127.0.0.1:{PORT}/results")
+            else:
+                wv.create_window("TCC Election · Results", f"http://127.0.0.1:{PORT}/results", fullscreen=True)
+            return self.send(200, {"ok": True})
+        if p == "/api/admin/savepost":
+            os.makedirs(POSTS, exist_ok=True)
+            name = re.sub(r"[^A-Za-z0-9_-]", "", str(data.get("name", "post")))[:60] or "post"
+            path = os.path.join(POSTS, f"{name}.png")
+            with open(path, "wb") as f:
+                f.write(base64.b64decode(str(data.get("image", "")).partition(",")[2]))
+            if os.name == "nt":
+                try:
+                    os.startfile(POSTS)
+                except OSError:
+                    pass
+            return self.send(200, {"ok": True, "path": path})
         if p == "/api/admin/title":
             set_setting("title", str(data.get("title", "")).strip() or "Student Parliament Election")
             return self.send(200, {"ok": True})
@@ -489,11 +716,41 @@ class H(BaseHTTPRequestHandler):
                 raise ValueError('Type RESET to confirm.')
             with LOCK, db() as c:
                 c.execute("DELETE FROM votes")
+                c.execute("DELETE FROM pcs")
+                c.execute("DELETE FROM turnout")
                 c.execute("UPDATE voters SET voted=0, voted_at=NULL")
                 if data.get("everything"):
                     c.execute("DELETE FROM voters")
                     c.execute("DELETE FROM candidates")
             set_setting("open", "0")
+            set_setting("ended", "0")
+            return self.send(200, {"ok": True})
+        return self.send(404, {"error": "Not found"})
+
+    def setup_api(self, p, data):
+        """First start: choose the admin version (needs the PIN) or a voting PC."""
+        if p == "/api/setup/discover":
+            return self.send(200, {"found": discover()})
+        if p == "/api/setup/admin":
+            if not hmac.compare_digest(str(data.get("pin", "")).strip(), MASTER_PIN):
+                time.sleep(1)
+                return self.send(401, {"error": "PIN අංකය වැරදියි · Wrong PIN"})
+            save_conf({"mode": "admin"})
+            threading.Thread(target=lambda: (setup_network(), desktop_shortcut("TCC Election Admin")), daemon=True).start()
+            SWITCH.set()
+            return self.send(200, {"ok": True})
+        if p == "/api/setup/voting":
+            pc = str(data.get("pc", "")).strip().upper()
+            server = str(data.get("server", "")).strip()
+            if not re.fullmatch(r"[A-Z0-9-]{1,20}", pc):
+                return self.send(400, {"error": "Choose a PC name."})
+            if ":" not in server:
+                server += f":{PORT}"
+            if not server_ok(server):
+                return self.send(400, {"error": f"Cannot reach the admin PC at {server}. Make sure the admin PC program is open."})
+            save_conf({"mode": "voting", "pc": pc, "server": server})
+            threading.Thread(target=lambda: desktop_shortcut(f"TCC Election {pc}"), daemon=True).start()
+            SWITCH.set()
             return self.send(200, {"ok": True})
         return self.send(404, {"error": "Not found"})
 
@@ -516,29 +773,96 @@ def addresses():
     return [f"http://{i}:{PORT}" for i in sorted(ips)]
 
 
-def main():
-    init_db()
-    srv = ThreadingHTTPServer(("0.0.0.0", PORT), H)
-    import atexit
-    atexit.register(tunnel_stop)
+SWITCH = threading.Event()  # set when the first-start setup has been saved
+CLIENT = {"fails": 0}
+
+
+def client_status():
+    conf = CONF["c"]
+    if server_ok(conf["server"]):
+        CLIENT["fails"] = 0
+        return {"ok": True, "url": f"http://{conf['server']}/?pc={conf['pc']}&home=http://127.0.0.1:{LOCAL_PORT}/connect", "pc": conf["pc"], "server": conf["server"]}
+    CLIENT["fails"] += 1
+    if CLIENT["fails"] % 3 == 0:  # the admin PC may have a new address: look for it on the network
+        found = discover(1.0)
+        if found:
+            conf = dict(conf, server=f"{found[0]['ip']}:{found[0]['port']}")
+            save_conf(conf)
+    return {"ok": False, "pc": conf["pc"], "server": conf["server"]}
+
+
+def start_server(host, port):
+    srv = ThreadingHTTPServer((host, port), H)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv
+
+
+def admin_services():
+    start_server("0.0.0.0", PORT)
     threading.Thread(target=backup_loop, daemon=True).start()
+    threading.Thread(target=find_responder, daemon=True).start()
     backup(force=True)
     url = f"http://127.0.0.1:{PORT}"
     print("Voting screen:", url, "\nAdmin panel:  ", url + "/admin", *addresses(), sep="\n")
-    if os.environ.get("TCC_ELECTION_HEADLESS"):
-        threading.Event().wait()
+    return url + "/admin"
+
+
+def main():
+    init_db()
+    import atexit
+    atexit.register(tunnel_stop)
     try:
         import webview  # pywebview: real Windows windows, no browser needed
-        WINDOWS["webview"] = webview
-        guard_close(webview.create_window("TCC Election · Admin", url + "/admin", width=1280, height=860, min_size=(900, 640), maximized=True))
-        webview.start()
-        tunnel_stop()
-        os._exit(0)
     except Exception:
-        webbrowser.open(url)
-        webbrowser.open(url + "/admin")
-        threading.Event().wait()
+        webview = None
+    if os.environ.get("TCC_ELECTION_HEADLESS"):
+        webview = None
+    WINDOWS["webview"] = webview
+    conf = CONF["c"]
+    local = f"http://127.0.0.1:{LOCAL_PORT}"
+
+    if conf and conf.get("mode") == "admin":
+        url = admin_services()
+        if not webview:
+            webbrowser.open(url)
+            return threading.Event().wait()
+        guard_close(webview.create_window("TCC Election · Admin", url, width=1280, height=860, min_size=(900, 640), maximized=True, js_api=Api()))
+    elif conf and conf.get("mode") == "voting":
+        start_server("127.0.0.1", LOCAL_PORT)
+        if not webview:
+            webbrowser.open(local + "/connect")
+            return threading.Event().wait()
+        guard_close(webview.create_window(f"TCC Election · {conf['pc']}", local + "/connect", fullscreen=True, js_api=Api()))
+    else:
+        setup_srv = start_server("127.0.0.1", LOCAL_PORT)
+        print("First start: open", local + "/setup")
+        win = webview.create_window("TCC Election · Install", local + "/setup", width=980, height=760, js_api=Api()) if webview else None
+
+        def after_setup():
+            SWITCH.wait()
+            time.sleep(0.6)
+            if CONF["c"]["mode"] == "admin":
+                setup_srv.shutdown()
+                setup_srv.server_close()
+                url = admin_services()
+                if win:
+                    guard_close(win)
+                    win.load_url(url)
+                    try:
+                        win.maximize()
+                    except Exception:
+                        pass
+            elif win:
+                guard_close(win)
+                win.load_url(local + "/connect")
+                win.toggle_fullscreen()
+        threading.Thread(target=after_setup, daemon=True).start()
+        if not webview:
+            webbrowser.open(local + "/setup")
+            return threading.Event().wait()
+    webview.start()
+    tunnel_stop()
+    os._exit(0)
 
 
 if __name__ == "__main__":

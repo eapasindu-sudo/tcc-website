@@ -26,6 +26,17 @@
   .clist { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
   .clist .cand { cursor: default; }
   .pill { display: inline-block; border-radius: 999px; padding: 4px 14px; font-weight: 700; }
+  #lock { position: fixed; inset: 0; z-index: 50; background: var(--deep); color: #fff6e6; display: grid; place-items: center; text-align: center; }
+  #lock form { display: grid; gap: 14px; justify-items: center; }
+  #lock img { width: 96px; height: 96px; background: #fff; border-radius: 50%; padding: 3px; }
+  #lock input { font-size: 2rem; text-align: center; letter-spacing: .4em; max-width: 260px; }
+  .pcgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+  .pc { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fff; }
+  .pc b { display: block; color: var(--maroon); }
+  .pc .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #bbb; margin-right: 6px; }
+  .pc.on .dot { background: #2e7d32; } .pc.on { border-color: #9cd3a6; background: #f3fbf4; }
+  .pc .v { font-size: 1.5rem; font-weight: 700; color: var(--maroon); }
+  #postPrev { max-width: 100%; border-radius: 12px; border: 1px solid var(--line); }
   .pill.on { background: #e7f4ea; color: #1e5b2b; } .pill.off { background: #fbe9e7; color: #8c1d18; }
 </style>
 </head>
@@ -33,8 +44,18 @@
 <header class="bar">
   <img src="/logo.webp" alt="">
   <h1>Election Admin<small>ශිෂ්‍ය පාර්ලිමේන්තු ඡන්දය · පාලක පුවරුව</small></h1>
-  <span class="right row"><button class="ghost" id="vwFull" style="background:#fff">Open voting screen (full screen)</button><button class="ghost" id="vwWin" style="background:#fff">Voting screen in a window</button></span>
+  <span class="right row"><button class="ghost" id="lockBtn" style="background:#fff">🔒 Lock</button><button class="ghost" id="vwFull" style="background:#fff">Open voting screen (full screen)</button><button class="ghost" id="vwWin" style="background:#fff">Voting screen in a window</button></span>
 </header>
+<div id="lock" hidden>
+  <form id="lockF">
+    <img src="/logo.webp" alt="">
+    <h2 style="margin:0">Admin panel එක lock කරලා · Locked</h2>
+    <p style="margin:0;opacity:.8">PIN අංකය ඇතුළත් කරන්න · Enter the PIN</p>
+    <input id="lockPin" type="password" inputmode="numeric" autocomplete="off">
+    <button class="gold">Unlock</button>
+    <p id="lockMsg" class="msg err" hidden></p>
+  </form>
+</div>
 <main>
   <section class="card" id="login" hidden>
     <h2 id="lt">Sign in</h2>
@@ -46,14 +67,33 @@
   <div id="app" hidden style="display:grid;gap:22px">
     <!-- Results -->
     <section class="card">
-      <div class="row" style="justify-content:space-between"><h2 style="margin:0">ප්‍රතිඵල · Live results</h2><span class="row"><span id="openPill" class="pill"></span><button id="openBtn" class="gold"></button></span></div>
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">ප්‍රතිඵල · Live results</h2><span class="row"><span id="openPill" class="pill"></span><button id="openBtn" class="gold"></button><button id="endBtn" class="danger">ඡන්දය අවසන් කරන්න · End voting</button><button id="resBtn" class="ghost" hidden>ප්‍රතිඵල පෙන්වන්න · Show results</button></span></div>
       <div class="stats" style="margin:16px 0">
         <div class="stat"><span class="help">ඡන්ද දුන් ගණන · Voted</span><b id="sVoted">0</b></div>
         <div class="stat"><span class="help">ඡන්ද දායකයින් · Voters</span><b id="sVoters">0</b></div>
-        <div class="stat"><span class="help">ප්‍රතිශතය · Turnout</span><b id="sTurn">0%</b></div>
+        <div class="stat"><span class="help">ඡන්ද ප්‍රතිශතය · Turnout</span><b id="sTurn">0%</b></div>
+        <div class="stat"><span class="help">ඡන්දය නොදුන් · Not voted</span><b id="sNot">0</b><span class="help" id="sNotP"></span></div>
       </div>
       <div class="res" id="res"></div>
       <p class="help" id="addr" style="margin-top:16px"></p>
+    </section>
+
+    <!-- Voting PCs -->
+    <section class="card">
+      <h2>Network PCs · ඡන්ද පරිගණක</h2>
+      <p class="help">Network එකට සම්බන්ධ voting PC සහ එක් එක් PC එකෙන් ගිය ඡන්ද ගණන. කොළ පාට = online.</p>
+      <div class="pcgrid" id="pcs"></div>
+    </section>
+
+    <!-- Hourly turnout -->
+    <section class="card">
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">පැයෙන් පැයට ඡන්ද ප්‍රතිශතය · Hourly turnout</h2><span class="row"><button class="gold" id="postNow">FB post: දැන් · Now</button><button class="ghost" id="postRes">FB post: ප්‍රතිඵල · Results</button></span></div>
+      <div class="scroll" style="margin-top:12px"><table><thead><tr><th>වේලාව · Time</th><th>Voted</th><th>%</th><th></th></tr></thead><tbody id="ht"></tbody></table></div>
+      <dialog id="postDlg" style="border:0;border-radius:18px;padding:20px;max-width:560px;width:94vw">
+        <img id="postPrev" alt="">
+        <p id="postMsg" class="msg ok" hidden></p>
+        <div class="row" style="justify-content:center;margin-top:10px"><button class="gold" id="postSave">Save image</button><button class="ghost" id="postClose">Close</button></div>
+      </dialog>
     </section>
 
     <!-- Internet link -->
@@ -126,16 +166,44 @@ const api = (url, body) => fetch(url, body ? { method: "POST", headers: { "Conte
 const say = (el, t, ok) => { el.hidden = false; el.textContent = t; el.className = "msg " + (ok ? "ok" : "err"); };
 const readFile = (f) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
 const photo = (c) => c.photo ? `<img src="/photos/${esc(c.photo)}" alt="">` : `<div class="ph">${esc(c.number)}</div>`;
-let R = null, VOTERS = [], setupMode = false;
+let R = null, VOTERS = [], setupMode = false, WHO = { local: false };
+const pct = (a, b) => (b ? (a * 100 / b).toFixed(1) : "0.0") + "%";
+const hourLabel = (h) => { const n = (+h.slice(11, 13) + 1) % 24; return `${h.slice(0, 10)} · ${n % 12 || 12}.00 ${n < 12 ? "AM" : "PM"} වන විට`; };
+
+// ----- screen lock (PIN), auto after 30 s of no use -----
+let idleT;
+function lockNow(tell = true) {
+  $("lock").hidden = false; $("app").hidden = true; $("login").hidden = true; $("lockPin").value = ""; $("lockMsg").hidden = true;
+  for (const d of document.querySelectorAll("dialog[open]")) if (d.id !== "closeDlg") d.close();
+  if (tell) api("/api/admin/lock", {});
+  setTimeout(() => $("lockPin").focus(), 50);
+}
+function activity() { clearTimeout(idleT); if (WHO.local && $("lock").hidden) idleT = setTimeout(() => lockNow(), 30000); }
+for (const ev of ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"]) document.addEventListener(ev, activity, { passive: true });
+$("lockF").onsubmit = async (e) => {
+  e.preventDefault();
+  const r = await api("/api/admin/unlock", { pin: $("lockPin").value });
+  if (!r.ok) { say($("lockMsg"), "PIN අංකය වැරදියි · Wrong PIN", false); $("lockPin").select(); return; }
+  $("lock").hidden = true; activity(); await load(); loadVoters();
+};
 
 async function load() {
   const r = await api("/api/admin/results");
+  if (r.status === 401 && WHO.local) { lockNow(false); return false; }
   if (r.status === 401) { const s = await api("/api/state"); setupMode = s.setup; $("lt").textContent = setupMode ? "Create the admin password" : "Sign in"; $("lh").textContent = setupMode ? "First time: choose a password for this admin panel (at least 6 characters)." : "Enter the admin password."; $("login").hidden = false; $("app").hidden = true; return false; }
   R = r; $("login").hidden = true; $("app").hidden = false;
   const max = Math.max(1, ...r.candidates.map((c) => c.votes)), total = r.candidates.reduce((a, c) => a + c.votes, 0);
   $("sVoted").textContent = r.voted; $("sVoters").textContent = r.voters; $("sTurn").textContent = r.voters ? Math.round(r.voted * 100 / r.voters) + "%" : "0%";
   $("openPill").textContent = r.open ? "ඡන්දය විවෘතයි · OPEN" : "ඡන්දය වසා ඇත · CLOSED"; $("openPill").className = "pill " + (r.open ? "on" : "off");
   $("openBtn").textContent = r.open ? "Close voting" : "Open voting";
+  if (r.ended) { $("openPill").textContent = "ඡන්දය අවසන් · ENDED"; $("openPill").className = "pill off"; $("openBtn").textContent = "Open voting again"; }
+  $("endBtn").hidden = r.ended; $("resBtn").hidden = !r.ended;
+  const nv = r.voters - r.voted; $("sNot").textContent = nv; $("sNotP").textContent = r.voters ? (nv * 100 / r.voters).toFixed(1) + "%" : "";
+  $("sTurn").textContent = r.voters ? (r.voted * 100 / r.voters).toFixed(1) + "%" : "0%";
+  const names = new Map(Array.from({ length: 20 }, (_, i) => [`PC${String(i + 1).padStart(2, "0")}`, { name: `PC${String(i + 1).padStart(2, "0")}`, votes: 0, online: false }]));
+  for (const p of r.pcs) names.set(p.name, p);
+  $("pcs").innerHTML = [...names.values()].map((p) => `<div class="pc ${p.online ? "on" : ""}"><b><span class="dot"></span>${esc(p.name)}</b><span class="v">${p.votes || 0}</span> <span class="help">votes</span><br><span class="help">${p.online ? "online" : p.name === "Internet link" || p.name === "Browser" ? "" : "offline"}</span></div>`).join("");
+  $("ht").innerHTML = r.hourly.length ? r.hourly.map((h) => `<tr><td>${esc(hourLabel(h.hour))}</td><td>${h.voted} / ${h.voters}</td><td><b>${pct(h.voted, h.voters)}</b></td><td><button class="ghost" data-post="${esc(h.hour)}">FB post</button></td></tr>`).join("") : `<tr><td colspan="4" class="help">Voting open කළාම පැයෙන් පැයට මෙතන පිරෙනවා.</td></tr>`;
   $("res").innerHTML = r.candidates.length ? r.candidates.map((c, i) => `<div class="res-row ${i === 0 && c.votes > 0 ? "lead" : ""}">${photo(c)}<div><b>No. ${esc(c.number)} · ${esc(c.name)}</b> <span class="help">${esc(c.class)}</span><div class="barwrap"><div class="bar" style="width:${c.votes * 100 / max}%"></div></div></div><div class="n">${c.votes}<small>${total ? Math.round(c.votes * 100 / total) : 0}%</small></div></div>`).join("") : `<p class="help">Add candidates below.</p>`;
   $("addr").innerHTML = r.addresses.length ? "Other computers on the school network can open the voting screen at " + r.addresses.map((a) => `<b>${esc(a)}</b>`).join(" or ") + " and this panel at the same address + <b>/admin</b>." : "";
   $("ct").innerHTML = r.byClass.map((c) => `<tr><td>${esc(c.class || "-")}</td><td>${c.total}</td><td>${c.voted || 0}</td><td>${c.total ? Math.round((c.voted || 0) * 100 / c.total) : 0}%</td></tr>`).join("");
@@ -171,6 +239,67 @@ for (const [id, fs] of [["vwFull", true], ["vwWin", false]]) $(id).onclick = () 
 $("cpSave").onclick = async () => { const r = await api("/api/admin/closepin", { pin: $("cp").value }); say($("tm"), r.ok ? "Close PIN saved." : r.error, r.ok); $("cp").value = ""; };
 $("bkNow").onclick = async () => { const r = await api("/api/admin/backup", {}); say($("tm"), r.ok ? "Backup saved." : r.error, r.ok); };
 $("openBtn").onclick = async () => { await api("/api/admin/open", { open: !R.open }); load(); };
+$("lockBtn").onclick = () => lockNow();
+$("endBtn").onclick = async () => {
+  if ($("endBtn").dataset.c !== "1") { $("endBtn").dataset.c = "1"; $("endBtn").textContent = "ආයෙත් ඔබන්න · Click again to end"; setTimeout(() => { $("endBtn").dataset.c = ""; $("endBtn").textContent = "ඡන්දය අවසන් කරන්න · End voting"; }, 4000); return; }
+  $("endBtn").dataset.c = ""; $("endBtn").textContent = "ඡන්දය අවසන් කරන්න · End voting";
+  await api("/api/admin/end", {}); await load(); api("/api/admin/resultswin", {});
+};
+$("resBtn").onclick = () => api("/api/admin/resultswin", {});
+
+// ----- Facebook post images (1080 x 1350) -----
+const LOGO = new Image(); LOGO.src = "/logo.webp";
+const imgs = {};
+const loadImg = (src) => imgs[src] || (imgs[src] = new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; }));
+let postName = "post";
+function frame(x, sub) {
+  const W = 1080, H = 1350;
+  x.fillStyle = "#4a0d12"; x.fillRect(0, 0, W, H);
+  const g = x.createLinearGradient(0, 0, 0, H); g.addColorStop(0, "rgba(212,160,23,.18)"); g.addColorStop(1, "rgba(0,0,0,.25)"); x.fillStyle = g; x.fillRect(0, 0, W, H);
+  x.fillStyle = "#d4a017"; x.fillRect(0, 0, W, 14); x.fillRect(0, H - 14, W, 14);
+  x.save(); x.beginPath(); x.arc(W / 2, 150, 92, 0, 7); x.fillStyle = "#fff"; x.fill(); x.clip(); if (LOGO.complete && LOGO.naturalWidth) x.drawImage(LOGO, W / 2 - 88, 62, 176, 176); x.restore();
+  x.textAlign = "center"; x.fillStyle = "#fff6e6"; x.font = "600 38px 'Noto Sans Sinhala', 'Iskoola Pota', sans-serif"; x.fillText("MR/ Thelijjawila Central College", W / 2, 300);
+  x.fillStyle = "#f2c94c"; x.font = "800 58px 'Noto Sans Sinhala', 'Iskoola Pota', sans-serif"; x.fillText(R.title, W / 2, 380, 1000);
+  x.fillStyle = "#fff6e6"; x.font = "500 40px 'Noto Sans Sinhala', 'Iskoola Pota', sans-serif"; x.fillText(sub, W / 2, 450, 1000);
+  x.font = "400 28px sans-serif"; x.fillStyle = "rgba(255,246,230,.7)"; x.fillText("#TCCElection · Student Parliament", W / 2, H - 50);
+}
+async function turnoutPost(label, voted, voters) {
+  const c = document.createElement("canvas"); c.width = 1080; c.height = 1350; const x = c.getContext("2d");
+  frame(x, "ඡන්ද ප්‍රතිශතය · Voter turnout");
+  x.fillStyle = "#fff6e6"; x.font = "600 46px 'Noto Sans Sinhala', 'Iskoola Pota', sans-serif"; x.fillText(label, 540, 560, 1000);
+  const p = voters ? voted * 100 / voters : 0;
+  x.beginPath(); x.lineWidth = 46; x.strokeStyle = "rgba(255,255,255,.12)"; x.arc(540, 830, 200, 0, 7); x.stroke();
+  x.beginPath(); x.strokeStyle = "#f2c94c"; x.lineCap = "round"; x.arc(540, 830, 200, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p / 100); x.stroke();
+  x.fillStyle = "#f2c94c"; x.font = "800 120px sans-serif"; x.fillText(p.toFixed(1) + "%", 540, 870);
+  x.fillStyle = "#fff6e6"; x.font = "500 42px 'Noto Sans Sinhala', 'Iskoola Pota', sans-serif";
+  x.fillText(`ඡන්දය දුන් · Voted: ${voted}  /  ${voters}`, 540, 1130);
+  x.fillText(`ඡන්දය නොදුන් · Not voted: ${voters - voted} (${(100 - p).toFixed(1)}%)`, 540, 1195);
+  return c.toDataURL("image/png");
+}
+async function resultsPost() {
+  const c = document.createElement("canvas"); c.width = 1080; c.height = 1350; const x = c.getContext("2d");
+  frame(x, "ඡන්ද ප්‍රතිඵල · Election results");
+  const list = [...R.candidates].sort((a, b) => b.votes - a.votes).slice(0, 6), total = R.candidates.reduce((a, c) => a + c.votes, 0);
+  let y = 510;
+  for (const [i, cd] of list.entries()) {
+    x.fillStyle = i === 0 ? "rgba(242,201,76,.25)" : "rgba(255,255,255,.08)"; x.fillRect(60, y, 960, 112);
+    const im = cd.photo ? await loadImg("/photos/" + cd.photo) : null;
+    if (im) x.drawImage(im, 74, y + 8, 76, 96);
+    x.textAlign = "left"; x.fillStyle = "#fff6e6"; x.font = "700 38px 'Noto Sans Sinhala', 'Iskoola Pota', sans-serif"; x.fillText(`${i + 1}. ${cd.name}`, 170, y + 50, 600);
+    x.font = "400 26px sans-serif"; x.fillText(`No. ${cd.number}${cd.class ? " · " + cd.class : ""}`, 170, y + 90, 600);
+    x.textAlign = "right"; x.fillStyle = "#f2c94c"; x.font = "800 44px sans-serif"; x.fillText(String(cd.votes), 1000, y + 52);
+    x.font = "500 28px sans-serif"; x.fillText(pct(cd.votes, total), 1000, y + 92); x.textAlign = "center";
+    y += 126;
+  }
+  x.fillStyle = "#fff6e6"; x.font = "500 36px 'Noto Sans Sinhala', 'Iskoola Pota', sans-serif"; x.fillText(`ඡන්ද ප්‍රතිශතය · Turnout ${pct(R.voted, R.voters)}  (${R.voted} / ${R.voters})`, 540, 1270);
+  return c.toDataURL("image/png");
+}
+async function showPost(url, name) { postName = name; $("postPrev").src = url; $("postMsg").hidden = true; $("postDlg").showModal(); }
+$("postNow").onclick = async () => { const d = new Date(), h = d.getHours(), m = String(d.getMinutes()).padStart(2, "0"); showPost(await turnoutPost(`${R.now.slice(0, 10)} · ${h % 12 || 12}.${m} ${h < 12 ? "AM" : "PM"} වන විට`, R.voted, R.voters), "turnout-" + R.now.replace(/[^0-9]/g, "")); };
+$("postRes").onclick = async () => showPost(await resultsPost(), "results-" + R.now.replace(/[^0-9]/g, ""));
+$("ht").onclick = async (e) => { const b = e.target.closest("[data-post]"); if (!b) return; const h = R.hourly.find((x) => x.hour === b.dataset.post); showPost(await turnoutPost(hourLabel(h.hour), h.voted, h.voters), "turnout-" + h.hour.replace(/[^0-9]/g, "")); };
+$("postClose").onclick = () => $("postDlg").close();
+$("postSave").onclick = async () => { const r = await api("/api/admin/savepost", { name: postName, image: $("postPrev").src }); say($("postMsg"), r.ok ? "Saved: " + r.path : r.error, r.ok); };
 
 $("cf").onsubmit = async (e) => {
   e.preventDefault(); $("c-save").disabled = true;
@@ -212,7 +341,7 @@ for (const [id, everything] of [["r-votes", false], ["r-all", true]]) $(id).oncl
   const r = await api("/api/admin/reset", { confirm: $("r-confirm").value.trim(), everything });
   say($("tm"), r.ok ? (everything ? "Everything deleted." : "Votes cleared.") : r.error, r.ok); $("r-confirm").value = ""; load(); loadVoters();
 };
-load().then((ok) => { if (ok) loadVoters(); });
+api("/api/whoami").then((w) => { WHO = w; return load(); }).then((ok) => { if (ok) { loadVoters(); activity(); } });
 setInterval(() => { if (!$("app").hidden) { load(); loadVoters(); } }, 3000);
 </script>
 
@@ -225,14 +354,6 @@ setInterval(() => { if (!$("app").hidden) { load(); loadVoters(); } }, 3000);
     <div class="row" style="justify-content:center"><button>Close program</button><button type="button" class="ghost" id="closeCancel">Cancel</button></div>
   </form>
 </dialog>
-<script>
-window.askClosePin = () => { const d = document.getElementById("closeDlg"); if (!d.open) { document.getElementById("closePin").value = ""; document.getElementById("closeMsg").hidden = true; d.showModal(); document.getElementById("closePin").focus(); } };
-document.getElementById("closeCancel").onclick = () => document.getElementById("closeDlg").close();
-document.getElementById("closeForm").onsubmit = async (e) => {
-  e.preventDefault();
-  const r = await fetch("/api/quit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: document.getElementById("closePin").value }) });
-  if (!r.ok) { const m = document.getElementById("closeMsg"); m.textContent = "PIN අංකය වැරදියි · Wrong PIN"; m.hidden = false; document.getElementById("closePin").select(); }
-};
-</script>
+<script src="/close.js"></script>
 </body>
 </html>

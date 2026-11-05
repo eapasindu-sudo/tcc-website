@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="si">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TCC Election · Install</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  main { max-width: 860px; margin: 0 auto; }
+  .choose { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .opt { background: #fff; border: 2px solid var(--line); border-radius: 18px; padding: 26px; text-align: center; cursor: pointer; font: inherit; color: inherit; display: grid; gap: 8px; }
+  .opt:hover, .opt.sel { border-color: var(--gold); background: #fffbef; }
+  .opt .ic { font-size: 3rem; }
+  .opt b { font-size: 1.3rem; color: var(--maroon); }
+  .pcs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 10px 0; }
+  .pcs button { padding: 12px 0; background: #fff; color: var(--maroon); border: 2px solid var(--line); }
+  .pcs button.sel { background: var(--maroon); color: #fff; border-color: var(--maroon); }
+  .step { display: grid; gap: 12px; margin-top: 20px; }
+  dialog { border: 0; border-radius: 18px; padding: 26px; max-width: 440px; width: 92vw; text-align: center; box-shadow: 0 30px 80px rgba(0,0,0,.4); }
+  dialog::backdrop { background: rgba(43,10,12,.6); }
+  @media (max-width: 640px) { .choose { grid-template-columns: 1fr; } .pcs { grid-template-columns: repeat(4, 1fr); } }
+</style>
+</head>
+<body>
+<header class="bar">
+  <img src="/logo.webp" alt="">
+  <h1>TCC Election · Install<small>ශිෂ්‍ය පාර්ලිමේන්තු ඡන්දය · ස්ථාපනය</small></h1>
+</header>
+<main>
+  <section class="card">
+    <h2 style="margin-top:0">මේ PC එක මොකක්ද? · What is this PC?</h2>
+    <div class="choose">
+      <button class="opt" id="oAdmin"><span class="ic">🖥️</span><b>Admin PC</b><span class="help">ප්‍රධාන පරිගණකය. ඡන්ද ගණන, ප්‍රතිඵල, අපේක්ෂකයින් සහ ළමයි මෙතන. PIN එක ඕනයි.</span></button>
+      <button class="opt" id="oVote"><span class="ic">🗳️</span><b>Voting PC</b><span class="help">ළමයි ඡන්දය දාන පරිගණකය. Network එකෙන් Admin PC එකට සම්බන්ධ වෙනවා.</span></button>
+    </div>
+
+    <form id="sAdmin" class="step" hidden>
+      <label>Admin version එක install කරන්න PIN අංකය · Install PIN<input id="aPin" type="password" inputmode="numeric" autocomplete="off" style="max-width:240px;font-size:1.4rem;text-align:center"></label>
+      <p class="help">OK කළාම Windows "Do you want to allow…" කියලා අහයි. <b>Yes</b> ඔබන්න. එතකොට network settings (firewall) තනියම හැදෙනවා.</p>
+      <div><button class="gold">Admin version එක install කරන්න</button></div>
+      <p id="aMsg" class="msg err" hidden></p>
+    </form>
+
+    <div id="sVote" class="step" hidden>
+      <b>PC නම තෝරන්න · Choose this PC's name</b>
+      <div class="pcs" id="pcs"></div>
+      <label class="help" style="font-weight:400">වෙනත් නමක් · Other name <input id="pcOther" placeholder="PC21" style="max-width:160px"></label>
+      <div><button class="gold" id="find">Network එකේ Admin PC එක හොයන්න · Find admin PC</button></div>
+      <p id="vMsg" class="msg" hidden></p>
+      <details><summary class="help" style="cursor:pointer">Admin PC එක හොයාගන්න බැරි නම් · Type the address</summary>
+        <div class="row" style="margin-top:8px"><input id="manual" placeholder="192.168.1.20" style="max-width:220px"><button class="ghost" id="manualGo">Connect</button></div>
+      </details>
+    </div>
+  </section>
+</main>
+
+<dialog id="netDlg">
+  <h3 style="margin-top:0;color:var(--maroon)">Network settings</h3>
+  <p id="netText"></p>
+  <div class="row" style="justify-content:center"><button class="gold" id="netOk">OK</button><button class="ghost" id="netNo">Cancel</button></div>
+  <p id="netMsg" class="msg err" hidden></p>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const api = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) }).then(async (r) => ({ ok: r.ok, ...(await r.json().catch(() => ({}))) }));
+const say = (el, t, ok) => { el.hidden = false; el.textContent = t; el.className = "msg " + (ok ? "ok" : "err"); };
+let pc = "PC01", server = "";
+$("pcs").innerHTML = Array.from({ length: 20 }, (_, i) => `PC${String(i + 1).padStart(2, "0")}`).map((n) => `<button type="button" data-pc="${n}" class="${n === pc ? "sel" : ""}">${n}</button>`).join("");
+$("pcs").onclick = (e) => { const b = e.target.closest("[data-pc]"); if (!b) return; pc = b.dataset.pc; $("pcOther").value = ""; for (const x of $("pcs").children) x.classList.toggle("sel", x === b); };
+$("pcOther").oninput = () => { if ($("pcOther").value.trim()) { pc = $("pcOther").value.trim().toUpperCase(); for (const x of $("pcs").children) x.classList.remove("sel"); } };
+function pick(which) { $("oAdmin").classList.toggle("sel", which === "a"); $("oVote").classList.toggle("sel", which === "v"); $("sAdmin").hidden = which !== "a"; $("sVote").hidden = which !== "v"; if (which === "a") $("aPin").focus(); }
+$("oAdmin").onclick = () => pick("a"); $("oVote").onclick = () => pick("v");
+$("sAdmin").onsubmit = async (e) => {
+  e.preventDefault();
+  const r = await api("/api/setup/admin", { pin: $("aPin").value });
+  if (!r.ok) { say($("aMsg"), r.error, false); $("aPin").select(); return; }
+  say($("aMsg"), "Install වුණා. Admin panel එක open වෙනවා…", true);
+};
+function ask(addr, name) {
+  server = addr;
+  $("netText").innerHTML = `Admin PC එක හම්බ වුණා: <b>${name}</b> (${addr})<br>මේ PC එක <b>${pc}</b> නමින් ඒකට සම්බන්ධ කරන්නද?`;
+  $("netMsg").hidden = true; $("netDlg").showModal();
+}
+$("find").onclick = async () => {
+  $("find").disabled = true; say($("vMsg"), "හොයනවා… · Searching the network…", true);
+  const r = await api("/api/setup/discover");
+  $("find").disabled = false;
+  if (!r.found || !r.found.length) return say($("vMsg"), "Admin PC එක හම්බ වුණේ නැහැ. Admin PC එකේ program එක open කරලා, දෙකම එකම network එකේ තියෙනවද බලන්න. නැත්නම් පහළින් address එක type කරන්න.", false);
+  $("vMsg").hidden = true; ask(`${r.found[0].ip}:${r.found[0].port}`, r.found[0].name);
+};
+$("manualGo").onclick = () => { const a = $("manual").value.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, ""); if (a) ask(a, a); };
+$("netNo").onclick = () => $("netDlg").close();
+$("netOk").onclick = async () => {
+  $("netOk").disabled = true;
+  const r = await api("/api/setup/voting", { pc, server });
+  $("netOk").disabled = false;
+  if (!r.ok) return say($("netMsg"), r.error, false);
+  $("netText").textContent = `${pc} ලෙස සම්බන්ධ වුණා. Voting screen එක open වෙනවා…`;
+};
+</script>
+</body>
+</html>

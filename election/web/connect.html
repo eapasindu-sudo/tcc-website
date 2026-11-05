@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="si">
+<head>
+<meta charset="utf-8">
+<title>Connecting</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="bar"><img src="/logo.webp" alt=""><h1>TCC Election<small id="pc"></small></h1></header>
+<main style="text-align:center;margin-top:16vh">
+  <h2>Admin PC එකට සම්බන්ධ වෙමින්…</h2>
+  <p class="help">Connecting to the admin PC <b id="srv"></b>. Admin PC එකේ program එක open කරලා තියෙනවද, network cable / Wi-Fi එක හරිද බලන්න.</p>
+</main>
+<script>
+async function tick() {
+  try {
+    const r = await fetch("/api/client/status").then((r) => r.json());
+    document.getElementById("pc").textContent = r.pc || ""; document.getElementById("srv").textContent = r.server || "";
+    if (r.ok) { location.href = r.url; return; }
+  } catch (e) {}
+  setTimeout(tick, 2000);
+}
+tick();
+</script>
+<dialog id="closeDlg" style="border:0;border-radius:18px;padding:24px;max-width:360px;width:90vw">
+  <form id="closeForm" style="display:grid;gap:12px;text-align:center">
+    <h3 style="margin:0;color:#7e1a1e">වසා දැමීමට PIN අංකය · Close PIN</h3>
+    <input id="closePin" type="password" inputmode="numeric" autocomplete="off" style="font-size:1.4rem;text-align:center">
+    <p id="closeMsg" class="msg err" hidden></p>
+    <div class="row" style="justify-content:center"><button>Close program</button><button type="button" class="ghost" id="closeCancel">Cancel</button></div>
+  </form>
+</dialog>
+<script src="/close.js"></script>
+</body>
+</html>

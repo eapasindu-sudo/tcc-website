@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="si">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Election Results</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body { background: var(--deep); color: #fff6e6; min-height: 100vh; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  .top { text-align: center; display: grid; gap: 4px; justify-items: center; }
+  .top img { width: 86px; height: 86px; background: #fff; border-radius: 50%; padding: 3px; }
+  .top h1 { margin: 6px 0 0; font-size: 2.2rem; color: var(--gold); }
+  .turn { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin: 18px 0 26px; }
+  .turn div { background: rgba(255,255,255,.08); border-radius: 14px; padding: 10px 22px; text-align: center; }
+  .turn b { display: block; font-size: 2rem; color: var(--gold); }
+  .list { display: grid; gap: 14px; }
+  .r { display: grid; grid-template-columns: 70px 90px minmax(0, 1fr) 150px; gap: 18px; align-items: center; background: rgba(255,255,255,.07); border-radius: 18px; padding: 12px 18px; opacity: 0; transform: translateY(20px); transition: all .6s; }
+  .r.show { opacity: 1; transform: none; }
+  .r .pos { font-size: 2rem; font-weight: 800; color: var(--gold); text-align: center; }
+  .r img, .r .ph { width: 90px; height: 110px; object-fit: cover; border-radius: 12px; background: #fff3; display: grid; place-items: center; font-size: 2rem; }
+  .r b { font-size: 1.5rem; display: block; }
+  .bw { background: rgba(255,255,255,.12); border-radius: 8px; height: 18px; margin-top: 10px; overflow: hidden; }
+  .bw div { height: 100%; width: 0; background: linear-gradient(90deg, var(--gold), #fff2b8); transition: width 1.4s ease-out; }
+  .r .n { text-align: right; font-size: 2.2rem; font-weight: 800; }
+  .r .n small { display: block; font-size: 1rem; font-weight: 400; opacity: .8; }
+  .r.win { background: linear-gradient(90deg, #8a6a12, #5a1015); border: 3px solid var(--gold); }
+  .hint { text-align: center; opacity: .6; margin-top: 22px; }
+  .winner { text-align: center; font-size: 2.4rem; color: var(--gold); margin: 26px 0 0; display: none; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><img src="/logo.webp" alt=""><span>MR/ Thelijjawila Central College</span><h1 id="title">Student Parliament Election</h1><span>ඡන්ද ප්‍රතිඵල · Election results</span></div>
+  <div class="turn">
+    <div>ඡන්දය දුන් · Voted<b id="voted">0</b></div>
+    <div>ඡන්ද දායකයින් · Voters<b id="voters">0</b></div>
+    <div>ඡන්ද ප්‍රතිශතය · Turnout<b id="turn">0%</b></div>
+    <div>ඡන්දය නොදුන් · Did not vote<b id="notv">0%</b></div>
+  </div>
+  <div class="list" id="list"></div>
+  <h2 class="winner" id="winner"></h2>
+  <p class="hint" id="hint">ඊළඟ ප්‍රතිඵලය පෙන්වීමට Space / click කරන්න · Press Space or click to show the next result (Alt+F4 to close)</p>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let rows = [], shown = 0;
+const pct = (a, b) => (b ? (a * 100 / b).toFixed(1) : "0.0") + "%";
+async function load() {
+  const r = await fetch("/api/admin/results").then((x) => x.json());
+  if (!r.candidates) { $("hint").textContent = "Admin panel එකෙන් unlock කරලා ආයෙත් open කරන්න."; return; }
+  const total = r.candidates.reduce((a, c) => a + c.votes, 0);
+  $("title").textContent = r.title; $("voted").textContent = r.voted; $("voters").textContent = r.voters;
+  $("turn").textContent = pct(r.voted, r.voters); $("notv").textContent = pct(r.voters - r.voted, r.voters);
+  const sorted = [...r.candidates].sort((a, b) => b.votes - a.votes);
+  rows = sorted.map((c, i) => ({ c, pos: i + 1, p: total ? c.votes * 100 / total : 0 }));
+  // show from the last place up to the winner
+  $("list").innerHTML = rows.map(({ c, pos, p }) => `<div class="r ${pos === 1 && c.votes > 0 ? "win" : ""}" id="r${pos}"><div class="pos">${pos}</div>${c.photo ? `<img src="/photos/${esc(c.photo)}" alt="">` : `<div class="ph">${esc(c.number)}</div>`}<div><b>${esc(c.name)}</b><span>අංකය · No. ${esc(c.number)}${c.class ? " · " + esc(c.class) : ""}</span><div class="bw"><div data-w="${p}"></div></div></div><div class="n">${c.votes}<small>${p.toFixed(1)}%</small></div></div>`).join("");
+}
+function next() {
+  if (shown >= rows.length) return;
+  const pos = rows.length - shown, el = $("r" + pos);
+  el.classList.add("show"); setTimeout(() => { el.querySelector("[data-w]").style.width = el.querySelector("[data-w]").dataset.w + "%"; }, 200);
+  shown++;
+  if (shown === rows.length) {
+    const w = rows[0];
+    if (w && w.c.votes > 0) { $("winner").style.display = "block"; $("winner").textContent = `🏆 ජයග්‍රාහකයා · Winner: ${w.c.name}`; }
+    $("hint").style.display = "none";
+  }
+}
+document.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter" || e.key === "ArrowRight") { e.preventDefault(); next(); } });
+document.addEventListener("click", next);
+load();
+</script>
+</body>
+</html>

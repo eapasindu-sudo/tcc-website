@@ -28,6 +28,7 @@
 <body>
 <header class="bar">
   <img src="/logo.webp" alt="">
+  <span id="pcName" style="order:9;margin-left:auto;font-size:1.3rem;font-weight:700;opacity:.85"></span>
   <h1><span id="title">Student Parliament Election</span><small>MR/ Thelijjawila Central College · ශිෂ්‍ය පාර්ලිමේන්තු ඡන්දය</small></h1>
 </header>
 <main>
@@ -60,8 +61,8 @@
   </section>
 
   <section id="closed" class="closed" hidden>
-    <h2>ඡන්දය දැනට විවෘත නැත</h2>
-    <p>Voting is not open right now.</p>
+    <h2 id="closedT">ඡන්දය දැනට විවෘත නැත</h2>
+    <p id="closedS">Voting is not open right now.</p>
   </section>
 </main>
 
@@ -82,7 +83,11 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-let state = { candidates: [] }, voter = null, chosen = null, idle;
+let state = { candidates: [] }, voter = null, chosen = null, idle, fails = 0;
+const Q = new URLSearchParams(location.search), PC = Q.get("pc") || "", HOME = Q.get("home") || "";
+$("pcName").textContent = PC;
+const ping = () => PC && api("/api/ping", { pc: PC }).then(() => { fails = 0; }).catch(() => { if (++fails >= 3 && HOME && !voter) location.href = HOME; });
+ping(); setInterval(ping, 5000);
 const api = (url, body) => fetch(url, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}).then(async (r) => ({ ok: r.ok, ...(await r.json()) }));
 const photo = (c) => c.photo ? `<img src="/photos/${esc(c.photo)}" alt="">` : `<div class="ph">${esc(c.number || "?")}</div>`;
 
@@ -97,6 +102,8 @@ document.addEventListener("pointerdown", poke); document.addEventListener("keydo
 
 async function refresh() {
   try { state = await api("/api/state"); } catch (e) {}
+  $("closedT").textContent = state.ended ? "ඡන්දය අවසන් · Voting has ended" : "ඡන්දය දැනට විවෘත නැත";
+  $("closedS").textContent = state.ended ? "ස්තුතියි! Thank you for voting." : "Voting is not open right now.";
   $("title").textContent = state.title || "Student Parliament Election";
   $("cands").innerHTML = state.candidates.map((c) => `<button class="cand" data-id="${c.id}">${photo(c)}<span class="no">${esc(c.number)}</span><b>${esc(c.name)}</b><small>${esc(c.class)}</small></button>`).join("");
 }
@@ -120,7 +127,7 @@ let openedAt = 0;
 $("ok").onclick = async () => {
   if (Date.now() - openedAt < 600) return; // ignore a double tap / held key that opened the dialog
   $("ok").disabled = true;
-  const r = await api("/api/vote", { id: voter.id, candidate: chosen.id });
+  const r = await api("/api/vote", { id: voter.id, candidate: chosen.id, pc: PC });
   $("ok").disabled = false;
   if (!r.ok) { $("m2").textContent = r.error; $("m2").hidden = false; return; }
   $("dlg").close(); show("s3"); voter = null; setTimeout(reset, 4000);
@@ -138,14 +145,6 @@ reset();
     <div class="row" style="justify-content:center"><button>Close program</button><button type="button" class="ghost" id="closeCancel">Cancel</button></div>
   </form>
 </dialog>
-<script>
-window.askClosePin = () => { const d = document.getElementById("closeDlg"); if (!d.open) { document.getElementById("closePin").value = ""; document.getElementById("closeMsg").hidden = true; d.showModal(); document.getElementById("closePin").focus(); } };
-document.getElementById("closeCancel").onclick = () => document.getElementById("closeDlg").close();
-document.getElementById("closeForm").onsubmit = async (e) => {
-  e.preventDefault();
-  const r = await fetch("/api/quit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: document.getElementById("closePin").value }) });
-  if (!r.ok) { const m = document.getElementById("closeMsg"); m.textContent = "PIN අංකය වැරදියි · Wrong PIN"; m.hidden = false; document.getElementById("closePin").select(); }
-};
-</script>
+<script src="/close.js"></script>
 </body>
 </html>
