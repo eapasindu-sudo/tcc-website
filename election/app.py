@@ -77,17 +77,83 @@ def open_voting_window(fullscreen):
     if wv is None:
         webbrowser.open(url)
         return
-    wv.create_window("TCC Election · Voting", url, fullscreen=fullscreen, width=1200, height=820, min_size=(800, 600))
+    guard_close(wv.create_window("TCC Election · Voting", url, fullscreen=fullscreen, width=1200, height=820, min_size=(800, 600)))
 
 
 def db():
     c = sqlite3.connect(DB_PATH, timeout=10)
     c.row_factory = sqlite3.Row
+    c.execute("PRAGMA synchronous=FULL")  # every saved vote is on the disk before the student sees "thank you"
     return c
+
+
+# ---------- Backups (power cuts, crashes) ----------
+BACKUPS = os.path.join(DATA, "backups")
+os.makedirs(BACKUPS, exist_ok=True)
+_last_backup = [0.0]
+
+
+def backup(force=False):
+    """Copy the whole database to TCC-Election-Data/backups. Keeps the newest 30 copies."""
+    if not force and time.time() - _last_backup[0] < 15:
+        return
+    _last_backup[0] = time.time()
+    try:
+        dst = sqlite3.connect(os.path.join(BACKUPS, time.strftime("election-%Y%m%d-%H%M%S.db")))
+        with db() as src:
+            src.backup(dst)
+        dst.close()
+        files = sorted(f for f in os.listdir(BACKUPS) if f.endswith(".db"))
+        for f in files[:-30]:
+            os.remove(os.path.join(BACKUPS, f))
+    except Exception as e:
+        print("Backup failed:", e)
+
+
+def backup_loop():
+    while True:
+        time.sleep(60)
+        backup(force=True)
+
+
+# ---------- Closing the program needs the close PIN ----------
+CLOSE = {"allowed": False}
+
+
+def close_pin_ok(pin):
+    stored = setting("close_pin") or setting("admin_pw")
+    return bool(stored) and check_pw(str(pin or ""), stored)
+
+
+def quit_app():
+    CLOSE["allowed"] = True
+    backup(force=True)
+    tunnel_stop()
+    wv = WINDOWS.get("webview")
+    if wv:
+        for w in list(wv.windows):
+            try:
+                w.destroy()
+            except Exception:
+                pass
+    threading.Timer(1.5, lambda: os._exit(0)).start()
+
+
+def guard_close(window):
+    def closing():
+        if CLOSE["allowed"]:
+            return True
+        try:
+            window.evaluate_js("window.askClosePin && window.askClosePin()")
+        except Exception:
+            pass
+        return False  # keep the window open until the PIN is entered
+    window.events.closing += closing
 
 
 def init_db():
     with db() as c:
+        c.execute("PRAGMA journal_mode=WAL")
         c.executescript("""
         CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT);
         CREATE TABLE IF NOT EXISTS voters (id TEXT PRIMARY KEY, name TEXT, class TEXT, voted INTEGER DEFAULT 0, voted_at TEXT, pin TEXT);
@@ -273,6 +339,7 @@ class H(BaseHTTPRequestHandler):
                 tot = c.execute("SELECT COUNT(*) n, SUM(voted) v FROM voters").fetchone()
                 by_class = [dict(r) for r in c.execute("SELECT class, COUNT(*) total, SUM(voted) voted FROM voters GROUP BY class ORDER BY class")]
             return self.send(200, {"candidates": res, "voters": tot["n"], "voted": tot["v"] or 0, "byClass": by_class, "open": setting("open") == "1", "title": setting("title", "Student Parliament Election"), "addresses": addresses(),
+                                    "closePinSet": setting("close_pin") is not None, "backups": BACKUPS,
                                     "tunnel": {"running": bool(TUNNEL["proc"] and TUNNEL["proc"].poll() is None), "url": TUNNEL["url"], "error": TUNNEL["error"], "available": bool(cloudflared_path())}})
         if p == "/api/admin/voters":
             if not self.is_admin():
@@ -319,6 +386,17 @@ class H(BaseHTTPRequestHandler):
                     return self.send(400, {"error": "Choose a candidate."})
                 c.execute("UPDATE voters SET voted=1, voted_at=? WHERE id=?", (time.strftime("%Y-%m-%d %H:%M:%S"), vid))
                 c.execute("INSERT INTO votes(candidate_id) VALUES(?)", (cid,))
+            threading.Thread(target=backup, daemon=True).start()
+            return self.send(200, {"ok": True})
+
+        # ----- closing the program (only on this computer) -----
+        if p == "/api/quit":
+            if self.via_internet() or self.client_address[0] not in ("127.0.0.1", "::1"):
+                return self.send(403, {"error": "Not allowed"})
+            if not close_pin_ok(data.get("pin")):
+                time.sleep(1)
+                return self.send(401, {"error": "Wrong PIN"})
+            quit_app()
             return self.send(200, {"ok": True})
 
         # ----- admin sign-in -----
@@ -393,6 +471,14 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/admin/title":
             set_setting("title", str(data.get("title", "")).strip() or "Student Parliament Election")
             return self.send(200, {"ok": True})
+        if p == "/api/admin/closepin":
+            if len(str(data.get("pin", ""))) < 4:
+                raise ValueError("Use at least 4 digits.")
+            set_setting("close_pin", hash_pw(str(data["pin"])))
+            return self.send(200, {"ok": True})
+        if p == "/api/admin/backup":
+            backup(force=True)
+            return self.send(200, {"ok": True, "folder": BACKUPS})
         if p == "/api/admin/password":
             if len(data.get("password", "")) < 6:
                 raise ValueError("Use at least 6 characters.")
@@ -436,6 +522,8 @@ def main():
     import atexit
     atexit.register(tunnel_stop)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
+    threading.Thread(target=backup_loop, daemon=True).start()
+    backup(force=True)
     url = f"http://127.0.0.1:{PORT}"
     print("Voting screen:", url, "\nAdmin panel:  ", url + "/admin", *addresses(), sep="\n")
     if os.environ.get("TCC_ELECTION_HEADLESS"):
@@ -443,7 +531,7 @@ def main():
     try:
         import webview  # pywebview: real Windows windows, no browser needed
         WINDOWS["webview"] = webview
-        webview.create_window("TCC Election · Admin", url + "/admin", width=1280, height=860, min_size=(900, 640), maximized=True)
+        guard_close(webview.create_window("TCC Election · Admin", url + "/admin", width=1280, height=860, min_size=(900, 640), maximized=True))
         webview.start()
         tunnel_stop()
         os._exit(0)

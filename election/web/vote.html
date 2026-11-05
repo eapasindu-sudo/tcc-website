@@ -128,5 +128,24 @@ $("ok").onclick = async () => {
 setInterval(() => { if (!voter) refresh().then(() => { if ($("s3").hidden) show(state.open ? "s1" : "closed"); }); }, 10000);
 reset();
 </script>
+
+<!-- Close PIN: shown when someone tries to close the program -->
+<dialog id="closeDlg" style="border:0;border-radius:18px;padding:24px;max-width:360px;width:90vw">
+  <form id="closeForm" style="display:grid;gap:12px;text-align:center">
+    <h3 style="margin:0;color:#7e1a1e">වසා දැමීමට PIN අංකය · Close PIN</h3>
+    <input id="closePin" type="password" inputmode="numeric" autocomplete="off" style="font-size:1.4rem;text-align:center">
+    <p id="closeMsg" class="msg err" hidden></p>
+    <div class="row" style="justify-content:center"><button>Close program</button><button type="button" class="ghost" id="closeCancel">Cancel</button></div>
+  </form>
+</dialog>
+<script>
+window.askClosePin = () => { const d = document.getElementById("closeDlg"); if (!d.open) { document.getElementById("closePin").value = ""; document.getElementById("closeMsg").hidden = true; d.showModal(); document.getElementById("closePin").focus(); } };
+document.getElementById("closeCancel").onclick = () => document.getElementById("closeDlg").close();
+document.getElementById("closeForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const r = await fetch("/api/quit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: document.getElementById("closePin").value }) });
+  if (!r.ok) { const m = document.getElementById("closeMsg"); m.textContent = "PIN අංකය වැරදියි · Wrong PIN"; m.hidden = false; document.getElementById("closePin").select(); }
+};
+</script>
 </body>
 </html>

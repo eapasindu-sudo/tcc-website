@@ -106,6 +106,12 @@
         <label>Election name<input id="t-title"></label><button class="ghost" id="t-save">Save name</button>
         <label>New admin password<input id="t-pw" type="password"></label><button class="ghost" id="t-pwsave">Change password</button>
       </div>
+      <h3 style="color:var(--maroon);margin:22px 0 8px">Close PIN · වසා දැමීමේ PIN</h3>
+      <p class="help" id="cpHelp">The program can only be closed with this PIN. Until you set one, the admin password is used.</p>
+      <div class="row"><input id="cp" type="password" inputmode="numeric" placeholder="New PIN (4+ digits)" style="max-width:220px"><button class="ghost" id="cpSave">Set close PIN</button></div>
+      <h3 style="color:var(--maroon);margin:22px 0 8px">Backups</h3>
+      <p class="help">Every vote is saved straight to the disk, and a full copy is saved automatically every minute (and after votes) in: <b id="bkDir"></b>. After a power cut, just open the program again: all votes are still there.</p>
+      <div class="row"><button class="ghost" id="bkNow">Back up now</button></div>
       <h3 style="color:#b3261e;margin:22px 0 8px">Reset</h3>
       <p class="help">Type RESET and press a button. "Clear votes" keeps students and candidates. "Delete everything" starts fresh.</p>
       <div class="row"><input id="r-confirm" placeholder="RESET" style="max-width:160px"><button class="danger" id="r-votes">Clear votes</button><button class="danger" id="r-all">Delete everything</button></div>
@@ -138,6 +144,7 @@ async function load() {
   $("tunOut").innerHTML = !t.available ? `<p class="msg err">The internet link part is missing from this copy of the program.</p>`
     : t.url ? `<div class="row"><input id="tunUrl" value="${esc(t.url)}" readonly style="max-width:480px;font-weight:700"><button class="ghost" id="tunCopy">Copy</button><a class="btn ghost" href="${esc(t.url)}" target="_blank" style="background:#fff;color:var(--maroon)">Open</a></div><p class="help">Send this link to the students.</p>`
     : t.running ? `<p class="msg ok">Creating the link… this takes up to a minute.</p>` : t.error ? `<p class="msg err">${esc(t.error)}</p>` : "";
+  $("bkDir").textContent = r.backups; $("cpHelp").textContent = r.closePinSet ? "The program can only be closed with the close PIN." : "The program can only be closed with this PIN. Until you set one, the admin password is used.";
   if (document.activeElement !== $("t-title")) $("t-title").value = r.title;
   const s = await api("/api/state");
   $("clist").innerHTML = s.candidates.map((c) => `<div class="cand">${photo(c)}<span class="no">${esc(c.number)}</span><b>${esc(c.name)}</b><small>${esc(c.class)}</small><div class="row" style="justify-content:center"><button class="ghost" data-edit='${esc(JSON.stringify(c))}'>Edit</button><button class="danger" data-del="${c.id}">Delete</button></div></div>`).join("");
@@ -161,6 +168,8 @@ $("lf").onsubmit = async (e) => {
 $("tunBtn").onclick = async () => { $("tunBtn").disabled = true; await api("/api/admin/tunnel", { on: !R.tunnel.running }); $("tunBtn").disabled = false; load(); };
 $("tunOut").onclick = (e) => { if (e.target.id === "tunCopy") { $("tunUrl").select(); navigator.clipboard?.writeText($("tunUrl").value); e.target.textContent = "Copied"; } };
 for (const [id, fs] of [["vwFull", true], ["vwWin", false]]) $(id).onclick = () => api("/api/admin/votewin", { fullscreen: fs });
+$("cpSave").onclick = async () => { const r = await api("/api/admin/closepin", { pin: $("cp").value }); say($("tm"), r.ok ? "Close PIN saved." : r.error, r.ok); $("cp").value = ""; };
+$("bkNow").onclick = async () => { const r = await api("/api/admin/backup", {}); say($("tm"), r.ok ? "Backup saved." : r.error, r.ok); };
 $("openBtn").onclick = async () => { await api("/api/admin/open", { open: !R.open }); load(); };
 
 $("cf").onsubmit = async (e) => {
@@ -205,6 +214,25 @@ for (const [id, everything] of [["r-votes", false], ["r-all", true]]) $(id).oncl
 };
 load().then((ok) => { if (ok) loadVoters(); });
 setInterval(() => { if (!$("app").hidden) { load(); loadVoters(); } }, 3000);
+</script>
+
+<!-- Close PIN: shown when someone tries to close the program -->
+<dialog id="closeDlg" style="border:0;border-radius:18px;padding:24px;max-width:360px;width:90vw">
+  <form id="closeForm" style="display:grid;gap:12px;text-align:center">
+    <h3 style="margin:0;color:#7e1a1e">වසා දැමීමට PIN අංකය · Close PIN</h3>
+    <input id="closePin" type="password" inputmode="numeric" autocomplete="off" style="font-size:1.4rem;text-align:center">
+    <p id="closeMsg" class="msg err" hidden></p>
+    <div class="row" style="justify-content:center"><button>Close program</button><button type="button" class="ghost" id="closeCancel">Cancel</button></div>
+  </form>
+</dialog>
+<script>
+window.askClosePin = () => { const d = document.getElementById("closeDlg"); if (!d.open) { document.getElementById("closePin").value = ""; document.getElementById("closeMsg").hidden = true; d.showModal(); document.getElementById("closePin").focus(); } };
+document.getElementById("closeCancel").onclick = () => document.getElementById("closeDlg").close();
+document.getElementById("closeForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const r = await fetch("/api/quit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: document.getElementById("closePin").value }) });
+  if (!r.ok) { const m = document.getElementById("closeMsg"); m.textContent = "PIN අංකය වැරදියි · Wrong PIN"; m.hidden = false; document.getElementById("closePin").select(); }
+};
 </script>
 </body>
 </html>
