@@ -9,7 +9,7 @@ One program that:
 Votes are secret: the database records THAT a student voted, never WHO they voted for.
 Data is stored in the folder "TCC-Election-Data" next to the program.
 """
-import base64, csv, hashlib, hmac, io, json, os, secrets, socket, sqlite3, sys, threading, time, webbrowser
+import base64, csv, re, subprocess, hashlib, hmac, io, json, os, secrets, socket, sqlite3, sys, threading, time, webbrowser
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
@@ -24,6 +24,49 @@ LOCK = threading.Lock()
 SESSIONS = {}  # admin session token -> expiry
 
 
+# ---------- Internet link (Cloudflare quick tunnel) ----------
+TUNNEL = {"proc": None, "url": None, "error": None}
+
+
+def cloudflared_path():
+    for d in (getattr(sys, "_MEIPASS", ""), BASE, os.path.dirname(os.path.abspath(__file__))):
+        for n in ("cloudflared.exe", "cloudflared"):
+            p = os.path.join(d, n)
+            if d and os.path.isfile(p):
+                return p
+    return None
+
+
+def tunnel_start():
+    if TUNNEL["proc"] and TUNNEL["proc"].poll() is None:
+        return
+    exe = cloudflared_path()
+    if not exe:
+        TUNNEL["error"] = "cloudflared was not found next to the program."
+        return
+    TUNNEL.update(url=None, error=None)
+    flags = 0x08000000 if os.name == "nt" else 0  # CREATE_NO_WINDOW
+    proc = subprocess.Popen([exe, "tunnel", "--no-autoupdate", "--url", f"http://127.0.0.1:{PORT}"],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace", creationflags=flags)
+    TUNNEL["proc"] = proc
+
+    def watch():
+        for line in proc.stdout:
+            m = re.search(r"https://[a-z0-9-]+\.trycloudflare\.com", line)
+            if m and not TUNNEL["url"]:
+                TUNNEL["url"] = m.group(0)
+        if TUNNEL["proc"] is proc:
+            TUNNEL.update(url=None, error=TUNNEL["error"] or "The internet link stopped. Check the internet connection and press Start again.")
+    threading.Thread(target=watch, daemon=True).start()
+
+
+def tunnel_stop():
+    p = TUNNEL["proc"]
+    TUNNEL.update(proc=None, url=None, error=None)
+    if p and p.poll() is None:
+        p.terminate()
+
+
 def db():
     c = sqlite3.connect(DB_PATH, timeout=10)
     c.row_factory = sqlite3.Row
@@ -34,10 +77,12 @@ def init_db():
     with db() as c:
         c.executescript("""
         CREATE TABLE IF NOT EXISTS settings (k TEXT PRIMARY KEY, v TEXT);
-        CREATE TABLE IF NOT EXISTS voters (id TEXT PRIMARY KEY, name TEXT, class TEXT, voted INTEGER DEFAULT 0, voted_at TEXT);
+        CREATE TABLE IF NOT EXISTS voters (id TEXT PRIMARY KEY, name TEXT, class TEXT, voted INTEGER DEFAULT 0, voted_at TEXT, pin TEXT);
         CREATE TABLE IF NOT EXISTS candidates (id INTEGER PRIMARY KEY AUTOINCREMENT, number TEXT, name TEXT, class TEXT, photo TEXT);
         CREATE TABLE IF NOT EXISTS votes (id INTEGER PRIMARY KEY AUTOINCREMENT, candidate_id INTEGER);
         """)
+        if "pin" not in [r[1] for r in c.execute("PRAGMA table_info(voters)")]:
+            c.execute("ALTER TABLE voters ADD COLUMN pin TEXT")
 
 
 def setting(k, default=None):
@@ -58,6 +103,17 @@ def norm_id(v):
     return s.lstrip("0") or s
 
 
+def norm_pin(v):
+    s = str(v if v is not None else "").strip()
+    if s.endswith(".0") and s[:-2].isdigit():
+        s = s[:-2]
+    return s or None
+
+
+def pin_ok(row, given):
+    return not row["pin"] or row["pin"] == norm_pin(given)
+
+
 def hash_pw(pw, salt=None):
     salt = salt or secrets.token_hex(16)
     return salt + "$" + hashlib.pbkdf2_hmac("sha256", pw.encode(), salt.encode(), 200000).hex()
@@ -71,6 +127,7 @@ def check_pw(pw, stored):
 # ---------- Student list import (Excel .xlsx or .csv) ----------
 NAME_RE = ("name", "නම")
 CLASS_RE = ("class", "grade", "පන්ති", "ශ්‍රේණි")
+PIN_RE = ("pin", "password", "රහස්")
 ID_RE = ("admission", "index", "adm", "reg", "ඇතුළත්", "ඇතුලත්", "විභාග අංක", "id")
 
 
@@ -96,11 +153,12 @@ def detect(rows):
         return None
     for hi, row in enumerate(rows[:20]):
         taken = set()
+        taken.add(pin := find(row, PIN_RE, taken))
         idc = find(row, ID_RE, taken); taken.add(idc)
         name = find(row, NAME_RE, taken); taken.add(name)
         cls = find(row, CLASS_RE, taken)
         if idc is not None and name is not None:
-            return hi, idc, name, cls
+            return hi, idc, name, cls, pin
     return None
 
 
@@ -109,7 +167,7 @@ def import_students(filename, raw, replace):
     found = detect(rows)
     if not found:
         raise ValueError("Could not find the name and admission/index number columns. Make sure the file has a heading row such as: Admission No | Name | Class")
-    hi, idc, namec, clsc = found
+    hi, idc, namec, clsc, pinc = found
     added = skipped = 0
     seen = set()
     with LOCK, db() as c:
@@ -125,9 +183,10 @@ def import_students(filename, raw, replace):
                 continue
             seen.add(vid)
             cls = str(r[clsc]).strip() if clsc is not None and len(r) > clsc else ""
-            c.execute("INSERT INTO voters(id,name,class) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, class=excluded.class", (vid, name, cls))
+            pin = norm_pin(r[pinc]) if pinc is not None and len(r) > pinc else None
+            c.execute("INSERT INTO voters(id,name,class,pin) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, class=excluded.class, pin=excluded.pin", (vid, name, cls, pin))
             added += 1
-    return {"added": added, "skipped": skipped, "columns": {"id": rows[hi][idc], "name": rows[hi][namec], "class": rows[hi][clsc] if clsc is not None else None}}
+    return {"added": added, "skipped": skipped, "columns": {"id": rows[hi][idc], "name": rows[hi][namec], "class": rows[hi][clsc] if clsc is not None else None, "pin": rows[hi][pinc] if pinc is not None else None}}
 
 
 # ---------- HTTP ----------
@@ -155,7 +214,12 @@ class H(BaseHTTPRequestHandler):
             raise ValueError("File too large")
         return json.loads(self.rfile.read(n) or b"{}")
 
+    def via_internet(self):
+        return bool(self.headers.get("Cf-Ray") or self.headers.get("Cf-Connecting-Ip"))
+
     def is_admin(self):
+        if self.via_internet():
+            return False
         for part in (self.headers.get("Cookie") or "").split(";"):
             k, _, v = part.strip().partition("=")
             if k == "tccadmin" and SESSIONS.get(v, 0) > time.time():
@@ -175,6 +239,8 @@ class H(BaseHTTPRequestHandler):
         if p in ("/", "/vote"):
             return self.file(os.path.join(WEB, "vote.html"), "text/html; charset=utf-8")
         if p == "/admin":
+            if self.via_internet():
+                return self.send(403, b"<h1>The admin panel can only be opened on the school computer.</h1>", "text/html; charset=utf-8")
             return self.file(os.path.join(WEB, "admin.html"), "text/html; charset=utf-8")
         if p in ("/logo.webp", "/style.css"):
             return self.file(os.path.join(WEB, p[1:]), "image/webp" if p.endswith("webp") else "text/css")
@@ -193,7 +259,8 @@ class H(BaseHTTPRequestHandler):
                 res = [dict(r) for r in c.execute("SELECT c.id, c.number, c.name, c.class, c.photo, COUNT(v.id) AS votes FROM candidates c LEFT JOIN votes v ON v.candidate_id=c.id GROUP BY c.id ORDER BY votes DESC, CAST(c.number AS INTEGER)")]
                 tot = c.execute("SELECT COUNT(*) n, SUM(voted) v FROM voters").fetchone()
                 by_class = [dict(r) for r in c.execute("SELECT class, COUNT(*) total, SUM(voted) voted FROM voters GROUP BY class ORDER BY class")]
-            return self.send(200, {"candidates": res, "voters": tot["n"], "voted": tot["v"] or 0, "byClass": by_class, "open": setting("open") == "1", "title": setting("title", "Student Parliament Election"), "addresses": addresses()})
+            return self.send(200, {"candidates": res, "voters": tot["n"], "voted": tot["v"] or 0, "byClass": by_class, "open": setting("open") == "1", "title": setting("title", "Student Parliament Election"), "addresses": addresses(),
+                                    "tunnel": {"running": bool(TUNNEL["proc"] and TUNNEL["proc"].poll() is None), "url": TUNNEL["url"], "error": TUNNEL["error"], "available": bool(cloudflared_path())}})
         if p == "/api/admin/voters":
             if not self.is_admin():
                 return self.send(401, {"error": "Please sign in"})
@@ -214,9 +281,12 @@ class H(BaseHTTPRequestHandler):
             if setting("open") != "1":
                 return self.send(403, {"error": "Voting is closed."})
             with db() as c:
-                r = c.execute("SELECT id, name, class, voted FROM voters WHERE id=?", (norm_id(data.get("id")),)).fetchone()
+                r = c.execute("SELECT id, name, class, voted, pin FROM voters WHERE id=?", (norm_id(data.get("id")),)).fetchone()
             if not r:
                 return self.send(404, {"error": "This number is not on the voters list."})
+            if not pin_ok(r, data.get("pin")):
+                time.sleep(1)
+                return self.send(401, {"error": "PIN", "needPin": True})
             if r["voted"]:
                 return self.send(409, {"error": f"{r['name']} has already voted."})
             return self.send(200, {"id": r["id"], "name": r["name"], "class": r["class"]})
@@ -225,9 +295,11 @@ class H(BaseHTTPRequestHandler):
                 return self.send(403, {"error": "Voting is closed."})
             vid, cid = norm_id(data.get("id")), data.get("candidate")
             with LOCK, db() as c:
-                r = c.execute("SELECT voted FROM voters WHERE id=?", (vid,)).fetchone()
+                r = c.execute("SELECT voted, pin FROM voters WHERE id=?", (vid,)).fetchone()
                 if not r:
                     return self.send(404, {"error": "This number is not on the voters list."})
+                if not pin_ok(r, data.get("pin")):
+                    return self.send(401, {"error": "Wrong PIN."})
                 if r["voted"]:
                     return self.send(409, {"error": "Already voted."})
                 if not c.execute("SELECT 1 FROM candidates WHERE id=?", (cid,)).fetchone():
@@ -237,6 +309,8 @@ class H(BaseHTTPRequestHandler):
             return self.send(200, {"ok": True})
 
         # ----- admin sign-in -----
+        if p.startswith("/api/admin/") and self.via_internet():
+            return self.send(403, {"error": "The admin panel can only be used on the school computer."})
         if p == "/api/admin/setup":
             if setting("admin_pw") is not None:
                 return self.send(403, {"error": "Already set up"})
@@ -292,7 +366,10 @@ class H(BaseHTTPRequestHandler):
             if not vid or not data.get("name"):
                 raise ValueError("Enter the number and name.")
             with LOCK, db() as c:
-                c.execute("INSERT INTO voters(id,name,class) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, class=excluded.class", (vid, data["name"].strip(), data.get("class", "").strip()))
+                c.execute("INSERT INTO voters(id,name,class,pin) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, class=excluded.class, pin=excluded.pin", (vid, data["name"].strip(), data.get("class", "").strip(), norm_pin(data.get("pin"))))
+            return self.send(200, {"ok": True})
+        if p == "/api/admin/tunnel":
+            tunnel_start() if data.get("on") else tunnel_stop()
             return self.send(200, {"ok": True})
         if p == "/api/admin/open":
             set_setting("open", "1" if data.get("open") else "0")
@@ -340,6 +417,8 @@ def addresses():
 def main():
     init_db()
     srv = ThreadingHTTPServer(("0.0.0.0", PORT), H)
+    import atexit
+    atexit.register(tunnel_stop)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     url = f"http://127.0.0.1:{PORT}"
     print("Voting screen:", url, "\nAdmin panel:  ", url + "/admin", *addresses(), sep="\n")
@@ -349,6 +428,8 @@ def main():
         import webview  # pywebview: a real Windows window
         webview.create_window("TCC Student Parliament Election", url, fullscreen="--window" not in sys.argv, min_size=(900, 640))
         webview.start()
+        tunnel_stop()
+        os._exit(0)
     except Exception:
         webbrowser.open(url)
         webbrowser.open(url + "/admin")

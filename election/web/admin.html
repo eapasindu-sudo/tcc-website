@@ -56,6 +56,13 @@
       <p class="help" id="addr" style="margin-top:16px"></p>
     </section>
 
+    <!-- Internet link -->
+    <section class="card">
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">Internet link · අන්තර්ජාල සබැඳිය</h2><button id="tunBtn" class="gold">Create internet link</button></div>
+      <p class="help">Press the button to get a link students can open from home. Keep this computer on and connected to the internet until voting ends. The link changes each time it is started. The admin panel never opens through this link.</p>
+      <div id="tunOut" style="margin-top:12px"></div>
+    </section>
+
     <!-- Candidates -->
     <section class="card">
       <h2>අපේක්ෂකයින් · Candidates</h2>
@@ -126,6 +133,11 @@ async function load() {
   $("res").innerHTML = r.candidates.length ? r.candidates.map((c, i) => `<div class="res-row ${i === 0 && c.votes > 0 ? "lead" : ""}">${photo(c)}<div><b>No. ${esc(c.number)} · ${esc(c.name)}</b> <span class="help">${esc(c.class)}</span><div class="barwrap"><div class="bar" style="width:${c.votes * 100 / max}%"></div></div></div><div class="n">${c.votes}<small>${total ? Math.round(c.votes * 100 / total) : 0}%</small></div></div>`).join("") : `<p class="help">Add candidates below.</p>`;
   $("addr").innerHTML = r.addresses.length ? "Other computers on the school network can open the voting screen at " + r.addresses.map((a) => `<b>${esc(a)}</b>`).join(" or ") + " and this panel at the same address + <b>/admin</b>." : "";
   $("ct").innerHTML = r.byClass.map((c) => `<tr><td>${esc(c.class || "-")}</td><td>${c.total}</td><td>${c.voted || 0}</td><td>${c.total ? Math.round((c.voted || 0) * 100 / c.total) : 0}%</td></tr>`).join("");
+  const t = r.tunnel;
+  $("tunBtn").textContent = t.running ? "Stop internet link" : "Create internet link"; $("tunBtn").className = t.running ? "danger" : "gold"; $("tunBtn").hidden = !t.available;
+  $("tunOut").innerHTML = !t.available ? `<p class="msg err">The internet link part is missing from this copy of the program.</p>`
+    : t.url ? `<div class="row"><input id="tunUrl" value="${esc(t.url)}" readonly style="max-width:480px;font-weight:700"><button class="ghost" id="tunCopy">Copy</button><a class="btn ghost" href="${esc(t.url)}" target="_blank" style="background:#fff;color:var(--maroon)">Open</a></div><p class="help">Send this link to the students.</p>`
+    : t.running ? `<p class="msg ok">Creating the link… this takes up to a minute.</p>` : t.error ? `<p class="msg err">${esc(t.error)}</p>` : "";
   if (document.activeElement !== $("t-title")) $("t-title").value = r.title;
   const s = await api("/api/state");
   $("clist").innerHTML = s.candidates.map((c) => `<div class="cand">${photo(c)}<span class="no">${esc(c.number)}</span><b>${esc(c.name)}</b><small>${esc(c.class)}</small><div class="row" style="justify-content:center"><button class="ghost" data-edit='${esc(JSON.stringify(c))}'>Edit</button><button class="danger" data-del="${c.id}">Delete</button></div></div>`).join("");
@@ -146,6 +158,8 @@ $("lf").onsubmit = async (e) => {
   if (!r.ok) return say($("lm"), r.error, false);
   $("pw").value = ""; await load(); loadVoters();
 };
+$("tunBtn").onclick = async () => { $("tunBtn").disabled = true; await api("/api/admin/tunnel", { on: !R.tunnel.running }); $("tunBtn").disabled = false; load(); };
+$("tunOut").onclick = (e) => { if (e.target.id === "tunCopy") { $("tunUrl").select(); navigator.clipboard?.writeText($("tunUrl").value); e.target.textContent = "Copied"; } };
 $("openBtn").onclick = async () => { await api("/api/admin/open", { open: !R.open }); load(); };
 
 $("cf").onsubmit = async (e) => {
@@ -189,7 +203,7 @@ for (const [id, everything] of [["r-votes", false], ["r-all", true]]) $(id).oncl
   say($("tm"), r.ok ? (everything ? "Everything deleted." : "Votes cleared.") : r.error, r.ok); $("r-confirm").value = ""; load(); loadVoters();
 };
 load().then((ok) => { if (ok) loadVoters(); });
-setInterval(() => { if (!$("app").hidden) { load(); loadVoters(); } }, 5000);
+setInterval(() => { if (!$("app").hidden) { load(); loadVoters(); } }, 3000);
 </script>
 </body>
 </html>
