@@ -603,7 +603,7 @@ class H(BaseHTTPRequestHandler):
             if self.via_internet():
                 return self.send(403, b"<h1>The admin panel can only be opened on the school computer.</h1>", "text/html; charset=utf-8")
             return self.file(os.path.join(WEB, "admin.html"), "text/html; charset=utf-8")
-        if p in ("/logo.webp", "/style.css", "/close.js"):
+        if p in ("/logo.webp", "/style.css", "/close.js", "/jspdf.min.js"):
             return self.file(os.path.join(WEB, p[1:]), {"webp": "image/webp", "css": "text/css", "js": "text/javascript"}[p.rsplit(".", 1)[1]])
         if p.startswith("/photos/"):
             name = os.path.basename(p)
@@ -822,12 +822,15 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/admin/savepost":
             os.makedirs(POSTS, exist_ok=True)
             name = re.sub(r"[^A-Za-z0-9_-]", "", str(data.get("name", "post")))[:60] or "post"
-            path = os.path.join(POSTS, f"{name}.png")
+            is_pdf = str(data.get("image", "")).startswith("data:application/pdf")
+            folder = EXPORTS if is_pdf else POSTS
+            os.makedirs(folder, exist_ok=True)
+            path = os.path.join(folder, f"{name}.{'pdf' if is_pdf else 'png'}")
             with open(path, "wb") as f:
                 f.write(base64.b64decode(str(data.get("image", "")).partition(",")[2]))
             if os.name == "nt":
                 try:
-                    os.startfile(POSTS)
+                    os.startfile(path if is_pdf else POSTS)
                 except OSError:
                     pass
             return self.send(200, {"ok": True, "path": path})

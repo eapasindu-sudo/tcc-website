@@ -89,7 +89,7 @@
     </section>
     <!-- Results -->
     <section class="card" data-tab="results">
-      <div class="row" style="justify-content:space-between"><h2 style="margin:0">ප්‍රතිඵල · Live results</h2><span class="row"><span id="openPill" class="pill"></span><button id="openBtn" class="gold"></button><button id="endBtn" class="danger">ඡන්දය අවසන් කරන්න · End voting</button><button id="resBtn" class="ghost" hidden>ප්‍රතිඵල පෙන්වන්න · Show results</button></span></div>
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">ප්‍රතිඵල · Live results</h2><span class="row"><span id="openPill" class="pill"></span><button id="openBtn" class="gold"></button><button id="endBtn" class="danger">ඡන්දය අවසන් කරන්න · End voting</button><button id="pdfBtn" class="ghost">📄 PDF</button><button id="resBtn" class="ghost" hidden>ප්‍රතිඵල පෙන්වන්න · Show results</button></span></div>
       <div class="stats" style="margin:16px 0">
         <div class="stat"><span class="help">ඡන්ද දුන් ගණන · Voted</span><b id="sVoted">0</b></div>
         <div class="stat"><span class="help">ඡන්ද දායකයින් · Voters</span><b id="sVoters">0</b></div>
@@ -347,6 +347,52 @@ async function showPost(url, name) { postName = name; $("postPrev").src = url; $
 $("postNow").onclick = async () => { const d = new Date(), h = d.getHours(), m = String(d.getMinutes()).padStart(2, "0"); showPost(await turnoutPost(`${R.now.slice(0, 10)} · ${h % 12 || 12}.${m} ${h < 12 ? "AM" : "PM"} වන විට`, R.voted, R.voters), "turnout-" + R.now.replace(/[^0-9]/g, "")); };
 $("postRes").onclick = async () => showPost(await resultsPost(), "results-" + R.now.replace(/[^0-9]/g, ""));
 $("ht").onclick = async (e) => { const b = e.target.closest("[data-post]"); if (!b) return; const h = R.hourly.find((x) => x.hour === b.dataset.post); showPost(await turnoutPost(hourLabel(h.hour), h.voted, h.voters), "turnout-" + h.hour.replace(/[^0-9]/g, "")); };
+// ----- PDF report (A4 pages drawn on a canvas, so Sinhala text prints correctly) -----
+async function reportPdf() {
+  const W = 1240, H = 1754, M = 90, F = "'Noto Sans Sinhala', 'Iskoola Pota', sans-serif";
+  const pages = []; let c, x, y;
+  const page = () => { c = document.createElement("canvas"); c.width = W; c.height = H; x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, W, H); pages.push(c); y = M;
+    x.fillStyle = "#7e1a1e"; x.fillRect(0, 0, W, 10); x.fillStyle = "#999"; x.font = `22px ${F}`; x.textAlign = "right"; x.fillText(`${R.title} · ${R.now} · page ${pages.length}`, W - M, H - 40); x.textAlign = "left"; };
+  const need = (h) => { if (y + h > H - 90) page(); };
+  const text = (t, size, opts = {}) => { x.font = `${opts.bold ? 700 : 400} ${size}px ${F}`; x.fillStyle = opts.color || "#222"; x.textAlign = opts.align || "left"; x.fillText(t, opts.x ?? M, y, opts.max || W - 2 * M); x.textAlign = "left"; };
+  const table = (title, cols, rows) => {
+    need(140); y += 30; text(title, 34, { bold: true, color: "#7e1a1e" }); y += 24;
+    const draw = (cells, bold, bg) => { need(46); if (bg) { x.fillStyle = bg; x.fillRect(M, y, W - 2 * M, 44); } let cx = M + 12;
+      cells.forEach((t, i) => { x.font = `${bold ? 700 : 400} 24px ${F}`; x.fillStyle = "#222"; const w = cols[i][1]; x.textAlign = cols[i][2] || "left"; x.fillText(String(t ?? ""), cols[i][2] === "right" ? cx + w - 16 : cx, y + 30, w - 16); cx += w; });
+      x.textAlign = "left"; x.strokeStyle = "#ddd"; x.beginPath(); x.moveTo(M, y + 44); x.lineTo(W - M, y + 44); x.stroke(); y += 44; };
+    draw(cols.map((k) => k[0]), true, "#f3e9e4");
+    rows.forEach((r, i) => draw(r, false, i % 2 ? "#faf7f5" : null));
+  };
+  page();
+  if (LOGO.complete && LOGO.naturalWidth) x.drawImage(LOGO, M, y, 110, 110);
+  y += 40; text("MR/ Thelijjawila Central College", 30, { x: M + 135, color: "#555" });
+  y += 46; text(R.title, 44, { bold: true, x: M + 135, color: "#7e1a1e" });
+  y += 40; text("ඡන්ද ප්‍රතිඵල වාර්තාව · Election results report · " + R.now, 26, { x: M + 135, color: "#555" });
+  y += 60;
+  const total = R.candidates.reduce((a, c) => a + c.votes, 0);
+  const boxes = [["ඡන්ද දායකයින් · Voters", R.voters], ["ඡන්දය දුන් · Voted", R.voted], ["ඡන්ද ප්‍රතිශතය · Turnout", pct(R.voted, R.voters)], ["ඡන්දය නොදුන් · Not voted", `${R.voters - R.voted} (${pct(R.voters - R.voted, R.voters)})`]];
+  const bw = (W - 2 * M - 30) / 4;
+  boxes.forEach(([l, v], i) => { const bx = M + i * (bw + 10); x.fillStyle = "#f6eeea"; x.fillRect(bx, y, bw, 120); x.font = `20px ${F}`; x.fillStyle = "#666"; x.fillText(l, bx + 14, y + 36, bw - 24); x.font = `700 40px ${F}`; x.fillStyle = "#7e1a1e"; x.fillText(String(v), bx + 14, y + 92, bw - 24); });
+  y += 130;
+  const sorted = [...R.candidates].sort((a, b) => b.votes - a.votes);
+  table("අපේක්ෂකයින් · Candidates", [["#", 70], ["අංකය · No.", 150], ["නම · Name", 470], ["පන්තිය · Class", 160], ["ඡන්ද · Votes", 110, "right"], ["%", 100, "right"]],
+    sorted.map((c, i) => [i + 1, c.number, c.name + (i === 0 && c.votes ? "  🏆" : ""), c.class, c.votes, pct(c.votes, total)]));
+  y += 36; text(`මුළු ඡන්ද · Total votes cast: ${total}${R.perStudent > 1 ? `  (එක් ළමයෙකුට අපේක්ෂකයින් ${R.perStudent} දක්වා · up to ${R.perStudent} per student)` : ""}`, 22, { color: "#555" }); y += 10;
+  table("පන්ති අනුව · By class", [["පන්තිය · Class", 300], ["ළමයින් · Students", 240, "right"], ["ඡන්දය දුන් · Voted", 240, "right"], ["%", 280, "right"]],
+    R.byClass.map((k) => [k.class || "-", k.total, k.voted || 0, pct(k.voted || 0, k.total)]));
+  if (R.hourly.length) table("පැයෙන් පැයට · Hourly turnout", [["වේලාව · Time", 560], ["ඡන්දය දුන් · Voted", 260, "right"], ["%", 240, "right"]], R.hourly.map((h) => [hourLabel(h.hour), `${h.voted} / ${h.voters}`, pct(h.voted, h.voters)]));
+  if (R.pcs.length) table("PC අනුව · By PC", [["PC", 560], ["ඡන්ද ගණන · Votes", 500, "right"]], R.pcs.map((p) => [p.name, p.votes || 0]));
+  need(200); y += 120; x.strokeStyle = "#555"; x.beginPath(); x.moveTo(M, y); x.lineTo(M + 380, y); x.moveTo(W - M - 380, y); x.lineTo(W - M, y); x.stroke(); y += 34;
+  text("භාරකාර ගුරුවරයා · Teacher in charge", 22, { color: "#555" }); text("විදුහල්පති · Principal", 22, { color: "#555", x: W - M - 380 });
+  const pdf = new window.jspdf.jsPDF({ unit: "mm", format: "a4" });
+  pages.forEach((p, i) => { if (i) pdf.addPage(); pdf.addImage(p.toDataURL("image/jpeg", 0.92), "JPEG", 0, 0, 210, 297); });
+  return pdf.output("datauristring");
+}
+$("pdfBtn").onclick = async () => {
+  $("pdfBtn").disabled = true; $("pdfBtn").textContent = "හදනවා…";
+  try { const r = await api("/api/admin/savepost", { name: "results-report-" + R.now.replace(/[^0-9]/g, ""), image: await reportPdf() }); alert(r.ok ? "PDF එක save කළා · Saved:\n" + r.path : r.error); }
+  finally { $("pdfBtn").disabled = false; $("pdfBtn").textContent = "📄 PDF"; }
+};
 $("postClose").onclick = () => $("postDlg").close();
 $("postSave").onclick = async () => { const r = await api("/api/admin/savepost", { name: postName, image: $("postPrev").src }); say($("postMsg"), r.ok ? "Saved: " + r.path : r.error, r.ok); };
 
@@ -404,6 +450,7 @@ setInterval(() => { if (!$("app").hidden) { load(); loadVoters(); } }, 3000);
     <div class="row" style="justify-content:center"><button>Close program</button><button type="button" class="ghost" id="closeCancel">Cancel</button></div>
   </form>
 </dialog>
+<script src="/jspdf.min.js"></script>
 <script src="/close.js"></script>
 </body>
 </html>
