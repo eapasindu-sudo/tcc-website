@@ -27,6 +27,54 @@ FIND_PORT = 8766     # UDP: voting PCs find the admin PC on the network
 LOCAL_PORT = int(os.environ.get("TCC_ELECTION_LOCAL_PORT", "8767"))  # setup / "connecting" screen on a voting PC
 CONF_PATH = os.path.join(DATA, "install.json")
 POSTS = os.path.join(DATA, "posts")
+EXPORTS = os.path.join(DATA, "exports")
+try:
+    with open(os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__))), "version.txt")) as _f:
+        VERSION = _f.read().strip() or "dev"
+except OSError:
+    VERSION = "dev"
+FROZEN = bool(getattr(sys, "frozen", False))
+
+
+# ---------- Updates: voting PCs copy the new program from the admin PC ----------
+def swap_exe(new_path):
+    """Replace the running program with new_path and start it again (data folder is kept)."""
+    exe = sys.executable
+    old = exe + ".old"
+    try:
+        if os.path.exists(old):
+            os.remove(old)
+    except OSError:
+        pass
+    os.replace(exe, old)          # Windows lets a running .exe be renamed
+    os.replace(new_path, exe)
+    CLOSE["allowed"] = True
+    backup(force=True)
+    tunnel_stop()
+    subprocess.Popen([exe], cwd=os.path.dirname(exe), close_fds=True)
+    os._exit(0)
+
+
+def update_from_admin(server):
+    tmp = sys.executable + ".new"
+    try:
+        with urllib.request.urlopen(f"http://{server}/app/TCC-Election.exe", timeout=60) as r, open(tmp, "wb") as f:
+            while chunk := r.read(1 << 20):
+                f.write(chunk)
+        if os.path.getsize(tmp) < 1_000_000:
+            raise ValueError("download too small")
+        swap_exe(tmp)
+    except Exception as e:
+        print("Update failed:", e)
+        CLIENT["updating"] = False
+
+
+def cleanup_old_exe():
+    if FROZEN:
+        try:
+            os.remove(sys.executable + ".old")
+        except OSError:
+            pass
 
 
 def load_conf():
@@ -218,8 +266,62 @@ def backup(force=False):
         files = sorted(f for f in os.listdir(BACKUPS) if f.endswith(".db"))
         for f in files[:-30]:
             os.remove(os.path.join(BACKUPS, f))
+        export_xlsx(os.path.join(BACKUPS, "students-by-class-latest.xlsx"))
     except Exception as e:
         print("Backup failed:", e)
+
+
+def export_xlsx(path):
+    """Excel file: a summary sheet plus one sheet per class (who voted, for manual checking/counting)."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Summary"
+    bold = Font(bold=True)
+    with db() as c:
+        cands = c.execute("SELECT c.number, c.name, c.class, COUNT(v.id) n FROM candidates c LEFT JOIN votes v ON v.candidate_id=c.id GROUP BY c.id ORDER BY n DESC").fetchall()
+        tot = c.execute("SELECT COUNT(*) n, SUM(voted) v FROM voters").fetchone()
+        voters = c.execute("SELECT id, name, class, voted, voted_at, voted_pc FROM voters ORDER BY class, name").fetchall()
+    ws.append([setting("title", "Student Parliament Election"), time.strftime("%Y-%m-%d %H:%M:%S")])
+    ws.append(["Voters", tot["n"], "Voted", tot["v"] or 0, "Not voted", tot["n"] - (tot["v"] or 0)])
+    ws.append([])
+    ws.append(["Candidate No.", "Name", "Class", "Votes"])
+    for cell in ws[4]:
+        cell.font = bold
+    for r in cands:
+        ws.append([r["number"], r["name"], r["class"], r["n"]])
+    by = {}
+    for v in voters:
+        by.setdefault(v["class"] or "No class", []).append(v)
+    ws.append([])
+    ws.append(["Class", "Students", "Voted", "%"])
+    for cell in ws[ws.max_row]:
+        cell.font = bold
+    green = PatternFill("solid", fgColor="E3F4E6")
+    used = set()
+    for cls, rows in by.items():
+        voted = sum(1 for r in rows if r["voted"])
+        ws.append([cls, len(rows), voted, round(voted * 100 / len(rows), 1)])
+        name = re.sub(r"[\\/*?:\[\]]", "-", str(cls))[:28] or "Class"
+        while name in used:
+            name += "_"
+        used.add(name)
+        sh = wb.create_sheet(name)
+        sh.append([f"Class {cls}", f"{voted} / {len(rows)} voted"])
+        sh.append(["#", "Admission / index no.", "Name", "Voted", "Time", "PC"])
+        for cell in sh[2]:
+            cell.font = bold
+        for i, r in enumerate(rows, 1):
+            sh.append([i, r["id"], r["name"], "YES" if r["voted"] else "", r["voted_at"] or "", r["voted_pc"] or ""])
+            if r["voted"]:
+                for cell in sh[sh.max_row]:
+                    cell.fill = green
+        for col, w in zip("ABCDEF", (5, 22, 34, 8, 20, 12)):
+            sh.column_dimensions[col].width = w
+    tmp = path + ".tmp"
+    wb.save(tmp)
+    os.replace(tmp, path)
 
 
 def backup_loop():
@@ -264,7 +366,7 @@ class Api:
         else:
             ok = close_pin_ok(pin)
         if ok:
-            quit_app()
+            threading.Timer(0.3, quit_app).start()  # answer the page first, then close
         else:
             time.sleep(1)
         return ok
@@ -272,6 +374,7 @@ class Api:
 
 def quit_app():
     CLOSE["allowed"] = True
+    threading.Timer(2.0, lambda: os._exit(0)).start()  # always exits, even if a window does not close
     backup(force=True)
     tunnel_stop()
     wv = WINDOWS.get("webview")
@@ -281,17 +384,20 @@ def quit_app():
                 w.destroy()
             except Exception:
                 pass
-    threading.Timer(1.5, lambda: os._exit(0)).start()
 
 
 def guard_close(window):
     def closing():
         if CLOSE["allowed"] or not CONF["c"]:
             return True
-        try:
-            window.evaluate_js("window.askClosePin && window.askClosePin()")
-        except Exception:
-            pass
+        # evaluate_js waits for the window's thread, which is busy running this handler:
+        # call it from another thread, or the window freezes (PIN box and Cancel stop working).
+        def ask():
+            try:
+                window.evaluate_js("window.askClosePin && window.askClosePin()")
+            except Exception:
+                pass
+        threading.Thread(target=ask, daemon=True).start()
         return False  # keep the window open until the PIN is entered
     window.events.closing += closing
 
@@ -306,9 +412,13 @@ def init_db():
         CREATE TABLE IF NOT EXISTS votes (id INTEGER PRIMARY KEY AUTOINCREMENT, candidate_id INTEGER);
         CREATE TABLE IF NOT EXISTS pcs (name TEXT PRIMARY KEY, ip TEXT, last_seen REAL, votes INTEGER DEFAULT 0);
         CREATE TABLE IF NOT EXISTS turnout (hour TEXT PRIMARY KEY, voted INTEGER, voters INTEGER);
+        CREATE TABLE IF NOT EXISTS alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT, voter TEXT, name TEXT, class TEXT, pc TEXT, first_at TEXT, first_pc TEXT, seen INTEGER DEFAULT 0);
         """)
-        if "pin" not in [r[1] for r in c.execute("PRAGMA table_info(voters)")]:
+        cols = [r[1] for r in c.execute("PRAGMA table_info(voters)")]
+        if "pin" not in cols:
             c.execute("ALTER TABLE voters ADD COLUMN pin TEXT")
+        if "voted_pc" not in cols:
+            c.execute("ALTER TABLE voters ADD COLUMN voted_pc TEXT")
 
 
 def setting(k, default=None):
@@ -436,7 +546,7 @@ class H(BaseHTTPRequestHandler):
 
     def body(self):
         n = int(self.headers.get("Content-Length") or 0)
-        if n > 30 * 1024 * 1024:
+        if n > 150 * 1024 * 1024:
             raise ValueError("File too large")
         return json.loads(self.rfile.read(n) or b"{}")
 
@@ -469,6 +579,17 @@ class H(BaseHTTPRequestHandler):
             if not self.local() and p != "/results" or self.via_internet():
                 return self.send(403, {"error": "Not allowed"})
             return self.file(os.path.join(WEB, p[1:] + ".html"), "text/html; charset=utf-8")
+        if p == "/api/version":
+            return self.send(200, {"version": VERSION, "frozen": FROZEN})
+        if p == "/app/TCC-Election.exe":
+            if self.via_internet() or not FROZEN:
+                return self.send(404, {"error": "Not found"})
+            return self.file(sys.executable, "application/octet-stream")
+        if p == "/api/admin/alerts":
+            if not self.is_admin():
+                return self.send(401, {"error": "Please sign in"})
+            with db() as c:
+                return self.send(200, [dict(r) for r in c.execute("SELECT * FROM alerts ORDER BY id DESC LIMIT 500")])
         if p == "/api/whoami":
             return self.send(200, {"local": self.local(), "mode": (CONF["c"] or {}).get("mode"), "conf": CONF["c"] if self.local() else None})
         if p == "/api/client/status":
@@ -491,7 +612,7 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/state":
             with db() as c:
                 cands = [dict(r) for r in c.execute("SELECT id, number, name, class, photo FROM candidates ORDER BY CAST(number AS INTEGER), number")]
-            return self.send(200, {"open": setting("open") == "1", "title": setting("title", "Student Parliament Election"), "candidates": cands, "setup": setting("admin_pw") is None, "ended": setting("ended") == "1"})
+            return self.send(200, {"open": setting("open") == "1", "title": setting("title", "Student Parliament Election"), "candidates": cands, "setup": setting("admin_pw") is None, "ended": setting("ended") == "1", "perStudent": int(setting("per_student", "1") or 1), "version": VERSION})
         if p == "/api/admin/results":
             if not self.is_admin():
                 return self.send(401, {"error": "Please sign in"})
@@ -502,7 +623,9 @@ class H(BaseHTTPRequestHandler):
                 now = time.time()
                 pcs = [dict(r, online=(now - (r["last_seen"] or 0)) < 15) for r in c.execute("SELECT name, ip, last_seen, votes FROM pcs ORDER BY name")]
                 hourly = [dict(r) for r in c.execute("SELECT hour, voted, voters FROM turnout ORDER BY hour")]
-            return self.send(200, {"ended": setting("ended") == "1", "pcs": pcs, "hourly": hourly, "now": time.strftime("%Y-%m-%d %H:%M"),
+            with db() as c:
+                alerts = c.execute("SELECT COUNT(*) n, SUM(seen=0) u FROM alerts").fetchone()
+            return self.send(200, {"ended": setting("ended") == "1", "alerts": alerts["n"], "alertsNew": alerts["u"] or 0, "perStudent": int(setting("per_student", "1") or 1), "version": VERSION, "pcs": pcs, "hourly": hourly, "now": time.strftime("%Y-%m-%d %H:%M"),
                                    "candidates": res, "voters": tot["n"], "voted": tot["v"] or 0, "byClass": by_class, "open": setting("open") == "1", "title": setting("title", "Student Parliament Election"), "addresses": addresses(),
                                     "closePinSet": setting("close_pin") is not None, "backups": BACKUPS,
                                     "tunnel": {"running": bool(TUNNEL["proc"] and TUNNEL["proc"].poll() is None), "url": TUNNEL["url"], "error": TUNNEL["error"], "available": bool(cloudflared_path())}})
@@ -550,12 +673,19 @@ class H(BaseHTTPRequestHandler):
                 time.sleep(1)
                 return self.send(401, {"error": "PIN", "needPin": True})
             if r["voted"]:
-                return self.send(409, {"error": f"{r['name']} has already voted."})
+                pc = "Internet link" if self.via_internet() else str(data.get("pc") or "Browser").strip()[:20]
+                with LOCK, db() as c:
+                    f = c.execute("SELECT voted_at, voted_pc FROM voters WHERE id=?", (r["id"],)).fetchone()
+                    c.execute("INSERT INTO alerts(at,voter,name,class,pc,first_at,first_pc) VALUES(?,?,?,?,?,?,?)",
+                              (time.strftime("%Y-%m-%d %H:%M:%S"), r["id"], r["name"], r["class"], pc, f["voted_at"], f["voted_pc"]))
+                return self.send(409, {"error": f"{r['name']} has already voted. මේ අංකයෙන් දැනටමත් ඡන්දය දී ඇත."})
             return self.send(200, {"id": r["id"], "name": r["name"], "class": r["class"]})
         if p == "/api/vote":
             if setting("open") != "1":
                 return self.send(403, {"error": "Voting is closed."})
-            vid, cid = norm_id(data.get("id")), data.get("candidate")
+            vid = norm_id(data.get("id"))
+            cids = data.get("candidates") or [data.get("candidate")]
+            per = int(setting("per_student", "1") or 1)
             with LOCK, db() as c:
                 r = c.execute("SELECT voted, pin FROM voters WHERE id=?", (vid,)).fetchone()
                 if not r:
@@ -564,11 +694,17 @@ class H(BaseHTTPRequestHandler):
                     return self.send(401, {"error": "Wrong PIN."})
                 if r["voted"]:
                     return self.send(409, {"error": "Already voted."})
-                if not c.execute("SELECT 1 FROM candidates WHERE id=?", (cid,)).fetchone():
+                try:
+                    cids = list(dict.fromkeys(int(x) for x in cids))
+                except (TypeError, ValueError):
                     return self.send(400, {"error": "Choose a candidate."})
-                c.execute("UPDATE voters SET voted=1, voted_at=? WHERE id=?", (time.strftime("%Y-%m-%d %H:%M:%S"), vid))
-                c.execute("INSERT INTO votes(candidate_id) VALUES(?)", (cid,))
+                if not 1 <= len(cids) <= per:
+                    return self.send(400, {"error": f"Choose 1 to {per} candidates."})
+                if c.execute(f"SELECT COUNT(*) n FROM candidates WHERE id IN ({','.join('?' * len(cids))})", cids).fetchone()["n"] != len(cids):
+                    return self.send(400, {"error": "Choose a candidate."})
                 pc = "Internet link" if self.via_internet() else str(data.get("pc") or "Browser").strip()[:20]
+                c.execute("UPDATE voters SET voted=1, voted_at=?, voted_pc=? WHERE id=?", (time.strftime("%Y-%m-%d %H:%M:%S"), pc, vid))
+                c.executemany("INSERT INTO votes(candidate_id) VALUES(?)", [(x,) for x in cids])
                 c.execute("INSERT INTO pcs(name,ip,last_seen,votes) VALUES(?,?,?,1) ON CONFLICT(name) DO UPDATE SET votes=votes+1", (pc, self.client_address[0], time.time() if pc != "Internet link" else 0))
             threading.Thread(target=lambda: (record_turnout(), backup()), daemon=True).start()
             return self.send(200, {"ok": True})
@@ -580,7 +716,7 @@ class H(BaseHTTPRequestHandler):
             if not close_pin_ok(data.get("pin")):
                 time.sleep(1)
                 return self.send(401, {"error": "Wrong PIN"})
-            quit_app()
+            threading.Timer(0.3, quit_app).start()
             return self.send(200, {"ok": True})
 
         # ----- admin sign-in -----
@@ -698,6 +834,37 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/admin/title":
             set_setting("title", str(data.get("title", "")).strip() or "Student Parliament Election")
             return self.send(200, {"ok": True})
+        if p == "/api/admin/perstudent":
+            n = int(data.get("n") or 1)
+            if not 1 <= n <= 20:
+                raise ValueError("Use a number from 1 to 20.")
+            set_setting("per_student", str(n))
+            return self.send(200, {"ok": True})
+        if p == "/api/admin/alerts/seen":
+            with db() as c:
+                c.execute("UPDATE alerts SET seen=1")
+            return self.send(200, {"ok": True})
+        if p == "/api/admin/export":
+            os.makedirs(EXPORTS, exist_ok=True)
+            path = os.path.join(EXPORTS, time.strftime("students-by-class-%Y%m%d-%H%M.xlsx"))
+            export_xlsx(path)
+            if os.name == "nt":
+                try:
+                    os.startfile(EXPORTS)
+                except OSError:
+                    pass
+            return self.send(200, {"ok": True, "path": path})
+        if p == "/api/admin/update":
+            if not self.local() or not FROZEN:
+                raise ValueError("Updates can only be installed from the program on the admin PC.")
+            raw = base64.b64decode(str(data.get("file", "")).partition(",")[2])
+            if len(raw) < 1_000_000 or raw[:2] != b"MZ":
+                raise ValueError("This is not the TCC-Election.exe program file.")
+            tmp = sys.executable + ".new"
+            with open(tmp, "wb") as f:
+                f.write(raw)
+            threading.Timer(1.0, lambda: swap_exe(tmp)).start()
+            return self.send(200, {"ok": True})
         if p == "/api/admin/closepin":
             if len(str(data.get("pin", ""))) < 4:
                 raise ValueError("Use at least 4 digits.")
@@ -718,6 +885,7 @@ class H(BaseHTTPRequestHandler):
                 c.execute("DELETE FROM votes")
                 c.execute("DELETE FROM pcs")
                 c.execute("DELETE FROM turnout")
+                c.execute("DELETE FROM alerts")
                 c.execute("UPDATE voters SET voted=0, voted_at=NULL")
                 if data.get("everything"):
                     c.execute("DELETE FROM voters")
@@ -774,13 +942,24 @@ def addresses():
 
 
 SWITCH = threading.Event()  # set when the first-start setup has been saved
-CLIENT = {"fails": 0}
+CLIENT = {"fails": 0, "updating": False}
 
 
 def client_status():
     conf = CONF["c"]
+    if CLIENT["updating"]:
+        return {"ok": False, "updating": True, "pc": conf["pc"], "server": conf["server"]}
     if server_ok(conf["server"]):
         CLIENT["fails"] = 0
+        try:
+            with urllib.request.urlopen(f"http://{conf['server']}/api/version", timeout=3) as r:
+                v = json.load(r)
+            if FROZEN and v.get("frozen") and v.get("version") not in (None, "dev", VERSION):
+                CLIENT["updating"] = True
+                threading.Thread(target=update_from_admin, args=(conf["server"],), daemon=True).start()
+                return {"ok": False, "updating": True, "pc": conf["pc"], "server": conf["server"]}
+        except Exception:
+            pass
         return {"ok": True, "url": f"http://{conf['server']}/?pc={conf['pc']}&home=http://127.0.0.1:{LOCAL_PORT}/connect", "pc": conf["pc"], "server": conf["server"]}
     CLIENT["fails"] += 1
     if CLIENT["fails"] % 3 == 0:  # the admin PC may have a new address: look for it on the network
@@ -809,6 +988,7 @@ def admin_services():
 
 def main():
     init_db()
+    cleanup_old_exe()
     import atexit
     atexit.register(tunnel_stop)
     try:

@@ -37,6 +37,12 @@
   .pc.on .dot { background: #2e7d32; } .pc.on { border-color: #9cd3a6; background: #f3fbf4; }
   .pc .v { font-size: 1.5rem; font-weight: 700; color: var(--maroon); }
   #postPrev { max-width: 100%; border-radius: 12px; border: 1px solid var(--line); }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; position: sticky; top: 0; z-index: 5; background: var(--bg, #f8f3ef); padding: 8px 0; }
+  .tabs button { background: #fff; color: var(--maroon); border: 1px solid var(--line); }
+  .tabs button.on { background: var(--maroon); color: #fff; border-color: var(--maroon); }
+  .badge { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 999px; background: #2e7d32; color: #fff; font-size: .8rem; }
+  .badge.red { background: #b3261e; } .badge:empty { display: none; }
+  .alrow.new td { background: #fdecea; font-weight: 600; }
   .pill.on { background: #e7f4ea; color: #1e5b2b; } .pill.off { background: #fbe9e7; color: #8c1d18; }
 </style>
 </head>
@@ -65,8 +71,24 @@
   </section>
 
   <div id="app" hidden style="display:grid;gap:22px">
+    <nav class="tabs" id="tabs">
+      <button data-t="results" class="on">📊 ප්‍රතිඵල · Results</button>
+      <button data-t="pcs">🖥️ PCs <span id="pcN" class="badge"></span></button>
+      <button data-t="alerts">⚠️ Alerts <span id="alN" class="badge red"></span></button>
+      <button data-t="cands">අපේක්ෂකයින් · Candidates</button>
+      <button data-t="students">ළමයින් · Students</button>
+      <button data-t="link">Internet link</button>
+      <button data-t="settings">⚙️ Settings</button>
+    </nav>
+
+    <!-- Alerts -->
+    <section class="card" data-tab="alerts">
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">⚠️ Alerts · අනතුරු ඇඟවීම්</h2><button class="ghost" id="alRefresh">↻ Refresh</button></div>
+      <p class="help">දැනටමත් ඡන්දය දාපු ඇතුළත්වීමේ අංකයකින් ආයෙත් ඡන්දය දාන්න හැදුවොත් මෙතන පෙන්නනවා. Someone tried to vote again with an admission number that has already voted.</p>
+      <div class="scroll"><table><thead><tr><th>වේලාව · Time</th><th>අංකය · No.</th><th>නම · Name</th><th>පන්තිය · Class</th><th>උත්සාහ කළ PC · Tried on</th><th>මුලින්ම ඡන්දය දුන්නේ · First voted</th></tr></thead><tbody id="alT"></tbody></table></div>
+    </section>
     <!-- Results -->
-    <section class="card">
+    <section class="card" data-tab="results">
       <div class="row" style="justify-content:space-between"><h2 style="margin:0">ප්‍රතිඵල · Live results</h2><span class="row"><span id="openPill" class="pill"></span><button id="openBtn" class="gold"></button><button id="endBtn" class="danger">ඡන්දය අවසන් කරන්න · End voting</button><button id="resBtn" class="ghost" hidden>ප්‍රතිඵල පෙන්වන්න · Show results</button></span></div>
       <div class="stats" style="margin:16px 0">
         <div class="stat"><span class="help">ඡන්ද දුන් ගණන · Voted</span><b id="sVoted">0</b></div>
@@ -79,14 +101,14 @@
     </section>
 
     <!-- Voting PCs -->
-    <section class="card">
-      <h2>Network PCs · ඡන්ද පරිගණක</h2>
-      <p class="help">Network එකට සම්බන්ධ voting PC සහ එක් එක් PC එකෙන් ගිය ඡන්ද ගණන. කොළ පාට = online.</p>
+    <section class="card" data-tab="pcs">
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">Network PCs · ඡන්ද පරිගණක</h2><button class="ghost" id="pcRefresh">↻ Refresh</button></div>
+      <p class="help">දැනට network එකට සම්බන්ධ (online) voting PC සහ එක් එක් PC එකෙන් ගිය ඡන්ද ගණන. Only PCs that are online now are shown.</p>
       <div class="pcgrid" id="pcs"></div>
     </section>
 
     <!-- Hourly turnout -->
-    <section class="card">
+    <section class="card" data-tab="results">
       <div class="row" style="justify-content:space-between"><h2 style="margin:0">පැයෙන් පැයට ඡන්ද ප්‍රතිශතය · Hourly turnout</h2><span class="row"><button class="gold" id="postNow">FB post: දැන් · Now</button><button class="ghost" id="postRes">FB post: ප්‍රතිඵල · Results</button></span></div>
       <div class="scroll" style="margin-top:12px"><table><thead><tr><th>වේලාව · Time</th><th>Voted</th><th>%</th><th></th></tr></thead><tbody id="ht"></tbody></table></div>
       <dialog id="postDlg" style="border:0;border-radius:18px;padding:20px;max-width:560px;width:94vw">
@@ -97,14 +119,14 @@
     </section>
 
     <!-- Internet link -->
-    <section class="card">
+    <section class="card" data-tab="link">
       <div class="row" style="justify-content:space-between"><h2 style="margin:0">Internet link · අන්තර්ජාල සබැඳිය</h2><button id="tunBtn" class="gold">Create internet link</button></div>
       <p class="help">Press the button to get a link students can open from home. Keep this computer on and connected to the internet until voting ends. The link changes each time it is started. The admin panel never opens through this link.</p>
       <div id="tunOut" style="margin-top:12px"></div>
     </section>
 
     <!-- Candidates -->
-    <section class="card">
+    <section class="card" data-tab="cands">
       <h2>අපේක්ෂකයින් · Candidates</h2>
       <form id="cf" class="grid">
         <input type="hidden" id="c-id">
@@ -119,7 +141,7 @@
     </section>
 
     <!-- Students -->
-    <section class="card">
+    <section class="card" data-tab="students">
       <h2>ඡන්ද දායකයින් · Students</h2>
       <p class="help">Upload an Excel (.xlsx) or CSV file. The name, class and admission/index number columns are found automatically. Students with the same number are updated, not added twice.</p>
       <div class="row">
@@ -140,12 +162,21 @@
     </section>
 
     <!-- Settings -->
-    <section class="card">
+    <section class="card" data-tab="settings">
       <h2>Settings</h2>
       <div class="grid">
         <label>Election name<input id="t-title"></label><button class="ghost" id="t-save">Save name</button>
         <label>New admin password<input id="t-pw" type="password"></label><button class="ghost" id="t-pwsave">Change password</button>
       </div>
+      <h3 style="color:var(--maroon);margin:22px 0 8px">එක ළමයෙකුට ඡන්දය දිය හැකි අපේක්ෂකයින් ගණන · Candidates per student</h3>
+      <p class="help">එක ළමයෙකුට එක පාරයි ඡන්දය දාන්න පුළුවන්. ඒ එක පාරේදී මෙතන දාන ගණනට අපේක්ෂකයින් තෝරන්න පුළුවන් (උදා: 2).</p>
+      <div class="row"><input id="perN" type="number" min="1" max="20" style="max-width:110px"><button class="ghost" id="perSave">Save</button></div>
+      <h3 style="color:var(--maroon);margin:22px 0 8px">Excel (පන්ති අනුව) · Class-wise Excel</h3>
+      <p class="help">හැම පන්තියකටම වෙනම sheet එකක්: ඇතුළත්වීමේ අංකය, නම, ඡන්දය දුන්නද, වේලාව, PC එක. Manual count කරන්න ඕන වුණොත් මේක print කරන්න. Backup එක්ක මේ file එක (students-by-class-latest.xlsx) තනියම update වෙනවා.</p>
+      <div class="row"><button class="ghost" id="xlNow">Excel file එක හදන්න · Save Excel</button></div>
+      <h3 style="color:var(--maroon);margin:22px 0 8px">Update · අලුත් version එක</h3>
+      <p class="help">දැන් තියෙන version එක: <b id="pVer"></b>. අලුත් TCC-Election.exe එක download කරලා මෙතනින් තෝරන්න. Admin PC එක update වෙලා restart වෙනවා, ඊට පස්සේ voting PC ඔක්කොම තනියම update වෙනවා. ඡන්ද දත්ත නැති වෙන්නේ නැහැ.</p>
+      <div class="row"><input id="upFile" type="file" accept=".exe" style="max-width:340px"><button class="gold" id="upGo">Update කරන්න</button></div>
       <h3 style="color:var(--maroon);margin:22px 0 8px">Close PIN · වසා දැමීමේ PIN</h3>
       <p class="help" id="cpHelp">The program can only be closed with this PIN. Until you set one, the admin password is used.</p>
       <div class="row"><input id="cp" type="password" inputmode="numeric" placeholder="New PIN (4+ digits)" style="max-width:220px"><button class="ghost" id="cpSave">Set close PIN</button></div>
@@ -166,7 +197,14 @@ const api = (url, body) => fetch(url, body ? { method: "POST", headers: { "Conte
 const say = (el, t, ok) => { el.hidden = false; el.textContent = t; el.className = "msg " + (ok ? "ok" : "err"); };
 const readFile = (f) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
 const photo = (c) => c.photo ? `<img src="/photos/${esc(c.photo)}" alt="">` : `<div class="ph">${esc(c.number)}</div>`;
-let R = null, VOTERS = [], setupMode = false, WHO = { local: false };
+let R = null, VOTERS = [], setupMode = false, WHO = { local: false }, TAB = "results";
+function showTab(t) { TAB = t; for (const b of $("tabs").children) b.classList.toggle("on", b.dataset.t === t); for (const s of document.querySelectorAll("[data-tab]")) s.hidden = s.dataset.tab !== t; if (t === "alerts") loadAlerts(true); }
+$("tabs").onclick = (e) => { const b = e.target.closest("[data-t]"); if (b) showTab(b.dataset.t); };
+async function loadAlerts(markSeen) {
+  const a = await api("/api/admin/alerts"); const list = Array.isArray(a) ? a : Object.values(a).filter((x) => typeof x === "object");
+  $("alT").innerHTML = list.length ? list.map((x) => `<tr class="alrow ${x.seen ? "" : "new"}"><td>${esc(x.at)}</td><td>${esc(x.voter)}</td><td>${esc(x.name)}</td><td>${esc(x.class)}</td><td>${esc(x.pc)}</td><td>${esc(x.first_at || "")} ${x.first_pc ? "· " + esc(x.first_pc) : ""}</td></tr>`).join("") : `<tr><td colspan="6" class="help">Alerts නැහැ · No alerts.</td></tr>`;
+  if (markSeen && list.some((x) => !x.seen)) { await api("/api/admin/alerts/seen", {}); $("alN").textContent = ""; }
+}
 const pct = (a, b) => (b ? (a * 100 / b).toFixed(1) : "0.0") + "%";
 const hourLabel = (h) => { const n = (+h.slice(11, 13) + 1) % 24; return `${h.slice(0, 10)} · ${n % 12 || 12}.00 ${n < 12 ? "AM" : "PM"} වන විට`; };
 
@@ -200,9 +238,11 @@ async function load() {
   $("endBtn").hidden = r.ended; $("resBtn").hidden = !r.ended;
   const nv = r.voters - r.voted; $("sNot").textContent = nv; $("sNotP").textContent = r.voters ? (nv * 100 / r.voters).toFixed(1) + "%" : "";
   $("sTurn").textContent = r.voters ? (r.voted * 100 / r.voters).toFixed(1) + "%" : "0%";
-  const names = new Map(Array.from({ length: 20 }, (_, i) => [`PC${String(i + 1).padStart(2, "0")}`, { name: `PC${String(i + 1).padStart(2, "0")}`, votes: 0, online: false }]));
-  for (const p of r.pcs) names.set(p.name, p);
-  $("pcs").innerHTML = [...names.values()].map((p) => `<div class="pc ${p.online ? "on" : ""}"><b><span class="dot"></span>${esc(p.name)}</b><span class="v">${p.votes || 0}</span> <span class="help">votes</span><br><span class="help">${p.online ? "online" : p.name === "Internet link" || p.name === "Browser" ? "" : "offline"}</span></div>`).join("");
+  const online = r.pcs.filter((p) => p.online), other = r.pcs.filter((p) => !p.online && p.votes && ["Internet link", "Browser"].includes(p.name));
+  $("pcN").textContent = online.length || "";
+  $("pcs").innerHTML = online.length || other.length ? [...online, ...other].map((p) => `<div class="pc ${p.online ? "on" : ""}"><b><span class="dot"></span>${esc(p.name)}</b><span class="v">${p.votes || 0}</span> <span class="help">votes</span><br><span class="help">${p.online ? "online · " + esc(p.ip || "") : ""}</span></div>`).join("") : `<p class="help">දැනට online PC නැහැ · No voting PC is online right now.</p>`;
+  $("alN").textContent = r.alertsNew || ""; $("pVer").textContent = r.version; if (document.activeElement !== $("perN")) $("perN").value = r.perStudent;
+  if (TAB === "alerts") loadAlerts();
   $("ht").innerHTML = r.hourly.length ? r.hourly.map((h) => `<tr><td>${esc(hourLabel(h.hour))}</td><td>${h.voted} / ${h.voters}</td><td><b>${pct(h.voted, h.voters)}</b></td><td><button class="ghost" data-post="${esc(h.hour)}">FB post</button></td></tr>`).join("") : `<tr><td colspan="4" class="help">Voting open කළාම පැයෙන් පැයට මෙතන පිරෙනවා.</td></tr>`;
   $("res").innerHTML = r.candidates.length ? r.candidates.map((c, i) => `<div class="res-row ${i === 0 && c.votes > 0 ? "lead" : ""}">${photo(c)}<div><b>No. ${esc(c.number)} · ${esc(c.name)}</b> <span class="help">${esc(c.class)}</span><div class="barwrap"><div class="bar" style="width:${c.votes * 100 / max}%"></div></div></div><div class="n">${c.votes}<small>${total ? Math.round(c.votes * 100 / total) : 0}%</small></div></div>`).join("") : `<p class="help">Add candidates below.</p>`;
   $("addr").innerHTML = r.addresses.length ? "Other computers on the school network can open the voting screen at " + r.addresses.map((a) => `<b>${esc(a)}</b>`).join(" or ") + " and this panel at the same address + <b>/admin</b>." : "";
@@ -240,6 +280,15 @@ $("cpSave").onclick = async () => { const r = await api("/api/admin/closepin", {
 $("bkNow").onclick = async () => { const r = await api("/api/admin/backup", {}); say($("tm"), r.ok ? "Backup saved." : r.error, r.ok); };
 $("openBtn").onclick = async () => { await api("/api/admin/open", { open: !R.open }); load(); };
 $("lockBtn").onclick = () => lockNow();
+$("pcRefresh").onclick = () => load(); $("alRefresh").onclick = () => loadAlerts(true);
+$("perSave").onclick = async () => { const r = await api("/api/admin/perstudent", { n: +$("perN").value }); say($("tm"), r.ok ? "Saved." : r.error, r.ok); load(); };
+$("xlNow").onclick = async () => { const r = await api("/api/admin/export", {}); say($("tm"), r.ok ? "Saved: " + r.path : r.error, r.ok); };
+$("upGo").onclick = async () => {
+  const f = $("upFile").files[0]; if (!f) return say($("tm"), "TCC-Election.exe file එක තෝරන්න.", false);
+  $("upGo").disabled = true; say($("tm"), "Update වෙනවා… program එක restart වෙනවා.", true);
+  const r = await api("/api/admin/update", { file: await readFile(f) });
+  if (!r.ok) { $("upGo").disabled = false; say($("tm"), r.error, false); }
+};
 $("endBtn").onclick = async () => {
   if ($("endBtn").dataset.c !== "1") { $("endBtn").dataset.c = "1"; $("endBtn").textContent = "ආයෙත් ඔබන්න · Click again to end"; setTimeout(() => { $("endBtn").dataset.c = ""; $("endBtn").textContent = "ඡන්දය අවසන් කරන්න · End voting"; }, 4000); return; }
   $("endBtn").dataset.c = ""; $("endBtn").textContent = "ඡන්දය අවසන් කරන්න · End voting";
@@ -341,6 +390,7 @@ for (const [id, everything] of [["r-votes", false], ["r-all", true]]) $(id).oncl
   const r = await api("/api/admin/reset", { confirm: $("r-confirm").value.trim(), everything });
   say($("tm"), r.ok ? (everything ? "Everything deleted." : "Votes cleared.") : r.error, r.ok); $("r-confirm").value = ""; load(); loadVoters();
 };
+showTab("results");
 api("/api/whoami").then((w) => { WHO = w; return load(); }).then((ok) => { if (ok) { loadVoters(); activity(); } });
 setInterval(() => { if (!$("app").hidden) { load(); loadVoters(); } }, 3000);
 </script>

@@ -17,6 +17,7 @@ async function tick() {
     const r = await fetch("/api/client/status").then((r) => r.json());
     document.getElementById("pc").textContent = r.pc || ""; document.getElementById("srv").textContent = r.server || "";
     if (r.ok) { location.href = r.url; return; }
+    if (r.updating) document.querySelector("main h2").textContent = "අලුත් version එක install වෙනවා… · Updating, please wait";
   } catch (e) {}
   setTimeout(tick, 2000);
 }

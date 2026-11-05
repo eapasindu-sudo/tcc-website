@@ -22,6 +22,12 @@
   .confirm h3 { margin: 0; font-size: 1.5rem; color: var(--maroon); }
   .done { text-align: center; margin-top: 12vh; display: grid; gap: 12px; justify-items: center; }
   .done .tick { width: 120px; height: 120px; border-radius: 50%; background: #2e7d32; color: #fff; font-size: 4rem; display: grid; place-items: center; }
+  .cand.sel { outline: 5px solid var(--gold); background: #fffbef; }
+  .multi { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; position: sticky; bottom: 0; background: #fff; border-top: 3px solid var(--gold); padding: 12px 20px; margin-top: 20px; border-radius: 14px 14px 0 0; }
+  .multi b { font-size: 1.3rem; color: var(--maroon); }
+  .dlist { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .dlist .one { display: grid; justify-items: center; gap: 4px; width: 130px; }
+  .dlist.many .one img, .dlist.many .one .ph { width: 120px !important; }
   .closed { text-align: center; margin-top: 14vh; color: var(--muted); }
 </style>
 </head>
@@ -49,8 +55,9 @@
       <div><span class="help">ඡන්දදායකයා · Voter</span><b id="vname"></b><span id="vclass" class="help"></span></div>
       <div class="pick"><span class="help">අපේක්ෂක අංකය</span><input id="cno" inputmode="numeric" placeholder="No."><button class="ghost" id="cancel">අවලංගු කරන්න</button></div>
     </div>
-    <h2>ඔබ කැමති අපේක්ෂකයාගේ ඡායාරූපය මත ක්ලික් කරන්න</h2>
+    <h2 id="pickH">ඔබ කැමති අපේක්ෂකයාගේ ඡායාරූපය මත ක්ලික් කරන්න</h2>
     <div class="cands" id="cands"></div>
+    <div class="multi" id="multi" hidden><b id="multiN"></b><button class="gold big" id="multiGo">ඉදිරියට · Next</button></div>
   </section>
 
   <!-- 3. thank you -->
@@ -69,7 +76,7 @@
 <dialog id="dlg">
   <div class="confirm">
     <span class="help">ඔබ ඡන්දය දෙන්නේ · You are voting for</span>
-    <div id="dphoto"></div>
+    <div id="dphoto" class="dlist"></div>
     <h3 id="dname"></h3>
     <span id="dno" class="help"></span>
     <div class="row" style="justify-content:center">
@@ -84,12 +91,13 @@
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 let state = { candidates: [] }, voter = null, chosen = null, idle, fails = 0;
+let sel = [], per = 1, firstVersion = null;
 const Q = new URLSearchParams(location.search), PC = Q.get("pc") || "", HOME = Q.get("home") || "";
 $("pcName").textContent = PC;
 const ping = () => PC && api("/api/ping", { pc: PC }).then(() => { fails = 0; }).catch(() => { if (++fails >= 3 && HOME && !voter) location.href = HOME; });
-ping(); setInterval(ping, 5000);
 const api = (url, body) => fetch(url, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}).then(async (r) => ({ ok: r.ok, ...(await r.json()) }));
 const photo = (c) => c.photo ? `<img src="/photos/${esc(c.photo)}" alt="">` : `<div class="ph">${esc(c.number || "?")}</div>`;
+ping(); setInterval(ping, 5000);
 
 function show(id) { for (const s of ["s1", "s2", "s3", "closed"]) $(s).hidden = s !== id; }
 function reset() {
@@ -104,30 +112,51 @@ async function refresh() {
   try { state = await api("/api/state"); } catch (e) {}
   $("closedT").textContent = state.ended ? "ඡන්දය අවසන් · Voting has ended" : "ඡන්දය දැනට විවෘත නැත";
   $("closedS").textContent = state.ended ? "ස්තුතියි! Thank you for voting." : "Voting is not open right now.";
+  if (firstVersion === null) firstVersion = state.version; else if (state.version && state.version !== firstVersion && HOME && !voter) location.href = HOME; // admin PC was updated
+  per = state.perStudent || 1;
+  $("pickH").textContent = per > 1 ? `අපේක්ෂකයින් ${per} දෙනෙකු දක්වා තෝරන්න · Choose up to ${per} candidates` : "ඔබ කැමති අපේක්ෂකයාගේ ඡායාරූපය මත ක්ලික් කරන්න";
   $("title").textContent = state.title || "Student Parliament Election";
   $("cands").innerHTML = state.candidates.map((c) => `<button class="cand" data-id="${c.id}">${photo(c)}<span class="no">${esc(c.number)}</span><b>${esc(c.name)}</b><small>${esc(c.class)}</small></button>`).join("");
 }
 $("f1").onsubmit = async (e) => {
   e.preventDefault();
-  const r = await api("/api/lookup", { id: $("vid").value });
+  const r = await api("/api/lookup", { id: $("vid").value, pc: PC });
   if (!r.ok) { $("m1").textContent = r.error; $("m1").hidden = false; $("vid").select(); return; }
   voter = r; $("vname").textContent = r.name; $("vclass").textContent = r.class ? "පන්තිය · Class " + r.class : "";
-  await refresh(); show("s2"); poke();
+  await refresh(); sel = []; drawSel(); show("s2"); poke();
 };
+function drawSel() {
+  for (const b of $("cands").children) b.classList.toggle("sel", sel.some((c) => c.id == b.dataset.id));
+  $("multi").hidden = per < 2; $("multiN").textContent = `තෝරා ඇත · Selected: ${sel.length} / ${per}`; $("multiGo").disabled = !sel.length;
+}
 function choose(c) {
   if (!c) return;
-  chosen = c; $("dphoto").innerHTML = photo(c); $("dname").textContent = c.name; $("dno").textContent = "අපේක්ෂක අංකය · No. " + c.number + (c.class ? " · " + c.class : "");
+  if (per > 1) {
+    if (sel.some((x) => x.id === c.id)) sel = sel.filter((x) => x.id !== c.id);
+    else if (sel.length < per) sel.push(c);
+    drawSel(); return;
+  }
+  sel = [c]; confirmSel();
+}
+function confirmSel() {
+  if (!sel.length) return;
+  chosen = sel;
+  $("dphoto").innerHTML = sel.map((c) => `<div class="one">${photo(c)}<b>${esc(c.name)}</b><small>No. ${esc(c.number)}</small></div>`).join("");
+  $("dname").textContent = sel.length === 1 ? sel[0].name : ""; $("dno").textContent = sel.length === 1 ? "අපේක්ෂක අංකය · No. " + sel[0].number + (sel[0].class ? " · " + sel[0].class : "") : `අපේක්ෂකයින් ${sel.length} දෙනා · ${sel.length} candidates`;
+  $("dphoto").className = "dlist" + (sel.length > 1 ? " many" : "");
+  for (const n of $("dphoto").querySelectorAll(".one b, .one small")) n.hidden = sel.length < 2;
   $("m2").hidden = true; openedAt = Date.now(); $("dlg").showModal(); $("back").focus();
 }
+$("multiGo").onclick = confirmSel;
 $("cands").onclick = (e) => { const b = e.target.closest(".cand"); if (b) choose(state.candidates.find((c) => c.id == b.dataset.id)); };
-$("cno").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); const c = state.candidates.find((c) => String(c.number).trim() === $("cno").value.trim()); if (!c) { $("cno").select(); return; } setTimeout(() => choose(c), 0); } };
+$("cno").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); const c = state.candidates.find((c) => String(c.number).trim() === $("cno").value.trim()); if (!c) { $("cno").select(); return; } $("cno").value = ""; setTimeout(() => choose(c), 0); } };
 $("back").onclick = () => $("dlg").close();
 $("cancel").onclick = reset;
 let openedAt = 0;
 $("ok").onclick = async () => {
   if (Date.now() - openedAt < 600) return; // ignore a double tap / held key that opened the dialog
   $("ok").disabled = true;
-  const r = await api("/api/vote", { id: voter.id, candidate: chosen.id, pc: PC });
+  const r = await api("/api/vote", { id: voter.id, candidates: chosen.map((c) => c.id), pc: PC });
   $("ok").disabled = false;
   if (!r.ok) { $("m2").textContent = r.error; $("m2").hidden = false; return; }
   $("dlg").close(); show("s3"); voter = null; setTimeout(reset, 4000);
