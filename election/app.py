@@ -267,32 +267,8 @@ def backup(force=False):
         for f in files[:-30]:
             os.remove(os.path.join(BACKUPS, f))
         export_xlsx(os.path.join(BACKUPS, "students-by-class-latest.xlsx"))
-        copy_to_extra(os.path.join(BACKUPS, files[-1]) if files else None)
     except Exception as e:
         print("Backup failed:", e)
-
-
-EXTRA = {"ok": None, "at": None, "error": None}
-
-
-def copy_to_extra(db_file):
-    """Second copy in a folder the admin chose: a USB drive, D:, or a Google Drive / OneDrive folder."""
-    import shutil
-    dest = setting("extra_backup")
-    if not dest:
-        return
-    try:
-        if not os.path.isdir(dest):
-            raise OSError("Folder not found (is the drive connected?)")
-        if db_file:
-            shutil.copy2(db_file, os.path.join(dest, os.path.basename(db_file)))
-        shutil.copy2(os.path.join(BACKUPS, "students-by-class-latest.xlsx"), os.path.join(dest, "students-by-class-latest.xlsx"))
-        old = sorted(f for f in os.listdir(dest) if f.startswith("election-") and f.endswith(".db"))
-        for f in old[:-30]:
-            os.remove(os.path.join(dest, f))
-        EXTRA.update(ok=True, at=time.strftime("%H:%M:%S"), error=None)
-    except Exception as e:
-        EXTRA.update(ok=False, at=time.strftime("%H:%M:%S"), error=str(e))
 
 
 def export_xlsx(path):
@@ -378,13 +354,6 @@ def close_pin_ok(pin):
 
 class Api:
     """Called from the page inside the program window (window.pywebview.api)."""
-    def pick_folder(self):
-        wv = WINDOWS.get("webview")
-        if not wv or not wv.windows:
-            return None
-        r = wv.windows[0].create_file_dialog(wv.FOLDER_DIALOG)
-        return r[0] if r else None
-
     def quit(self, pin):
         conf = CONF["c"] or {}
         if conf.get("mode") == "voting":
@@ -658,7 +627,7 @@ class H(BaseHTTPRequestHandler):
                 alerts = c.execute("SELECT COUNT(*) n, SUM(seen=0) u FROM alerts").fetchone()
             return self.send(200, {"ended": setting("ended") == "1", "alerts": alerts["n"], "alertsNew": alerts["u"] or 0, "perStudent": int(setting("per_student", "1") or 1), "version": VERSION, "pcs": pcs, "hourly": hourly, "now": time.strftime("%Y-%m-%d %H:%M"),
                                    "candidates": res, "voters": tot["n"], "voted": tot["v"] or 0, "byClass": by_class, "open": setting("open") == "1", "title": setting("title", "Student Parliament Election"), "addresses": addresses(),
-                                    "closePinSet": setting("close_pin") is not None, "backups": BACKUPS, "extraBackup": setting("extra_backup") or "", "extraStatus": EXTRA,
+                                    "closePinSet": setting("close_pin") is not None, "backups": BACKUPS,
                                     "tunnel": {"running": bool(TUNNEL["proc"] and TUNNEL["proc"].poll() is None), "url": TUNNEL["url"], "error": TUNNEL["error"], "available": bool(cloudflared_path())}})
         if p == "/api/admin/voters":
             if not self.is_admin():
@@ -868,14 +837,6 @@ class H(BaseHTTPRequestHandler):
         if p == "/api/admin/title":
             set_setting("title", str(data.get("title", "")).strip() or "Student Parliament Election")
             return self.send(200, {"ok": True})
-        if p == "/api/admin/extrabackup":
-            folder = str(data.get("folder", "")).strip()
-            if folder and not os.path.isdir(folder):
-                raise ValueError("That folder does not exist.")
-            set_setting("extra_backup", folder)
-            if folder:
-                backup(force=True)
-            return self.send(200, {"ok": True, "status": EXTRA})
         if p == "/api/admin/perstudent":
             n = int(data.get("n") or 1)
             if not 1 <= n <= 20:
