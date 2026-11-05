@@ -183,6 +183,10 @@
       <h3 style="color:var(--maroon);margin:22px 0 8px">Backups</h3>
       <p class="help">Every vote is saved straight to the disk, and a full copy is saved automatically every minute (and after votes) in: <b id="bkDir"></b>. After a power cut, just open the program again: all votes are still there.</p>
       <div class="row"><button class="ghost" id="bkNow">Back up now</button></div>
+      <h3 style="color:var(--maroon);margin:22px 0 8px">දෙවෙනි backup folder · Second backup folder</h3>
+      <p class="help">Google Drive (G:\My Drive\…), USB drive එකක් හෝ D: drive එකක folder එකක් තෝරන්න. හැම backup එකක්ම ඒ folder එකටත් copy වෙනවා.</p>
+      <div class="row"><input id="xbDir" placeholder="G:\My Drive\TCC-Election-Backup" style="max-width:420px"><button class="ghost" id="xbPick">Choose…</button><button class="gold" id="xbSave">Save</button><button class="ghost" id="xbOff">Turn off</button></div>
+      <p class="help" id="xbStat"></p>
       <h3 style="color:#b3261e;margin:22px 0 8px">Reset</h3>
       <p class="help">Type RESET and press a button. "Clear votes" keeps students and candidates. "Delete everything" starts fresh.</p>
       <div class="row"><input id="r-confirm" placeholder="RESET" style="max-width:160px"><button class="danger" id="r-votes">Clear votes</button><button class="danger" id="r-all">Delete everything</button></div>
@@ -252,7 +256,9 @@ async function load() {
   $("tunOut").innerHTML = !t.available ? `<p class="msg err">The internet link part is missing from this copy of the program.</p>`
     : t.url ? `<div class="row"><input id="tunUrl" value="${esc(t.url)}" readonly style="max-width:480px;font-weight:700"><button class="ghost" id="tunCopy">Copy</button><a class="btn ghost" href="${esc(t.url)}" target="_blank" style="background:#fff;color:var(--maroon)">Open</a></div><p class="help">Send this link to the students.</p>`
     : t.running ? `<p class="msg ok">Creating the link… this takes up to a minute.</p>` : t.error ? `<p class="msg err">${esc(t.error)}</p>` : "";
-  $("bkDir").textContent = r.backups; $("cpHelp").textContent = r.closePinSet ? "The program can only be closed with the close PIN." : "The program can only be closed with this PIN. Until you set one, the admin password is used.";
+  $("bkDir").textContent = r.backups;
+  if (document.activeElement !== $("xbDir") && !$("xbDir").dataset.dirty) $("xbDir").value = r.extraBackup;
+  const xs = r.extraStatus; $("xbStat").innerHTML = !r.extraBackup ? "දැනට off · Off" : xs.ok === false ? `<span style="color:#b3261e">✗ ${esc(xs.at)}: ${esc(xs.error)}</span>` : xs.ok ? `<span style="color:#1e5b2b">✓ අන්තිම copy එක · Last copied ${esc(xs.at)}</span>` : ""; $("cpHelp").textContent = r.closePinSet ? "The program can only be closed with the close PIN." : "The program can only be closed with this PIN. Until you set one, the admin password is used.";
   if (document.activeElement !== $("t-title")) $("t-title").value = r.title;
   const s = await api("/api/state");
   $("clist").innerHTML = s.candidates.map((c) => `<div class="cand">${photo(c)}<span class="no">${esc(c.number)}</span><b>${esc(c.name)}</b><small>${esc(c.class)}</small><div class="row" style="justify-content:center"><button class="ghost" data-edit='${esc(JSON.stringify(c))}'>Edit</button><button class="danger" data-del="${c.id}">Delete</button></div></div>`).join("");
@@ -277,6 +283,10 @@ $("tunBtn").onclick = async () => { $("tunBtn").disabled = true; await api("/api
 $("tunOut").onclick = (e) => { if (e.target.id === "tunCopy") { $("tunUrl").select(); navigator.clipboard?.writeText($("tunUrl").value); e.target.textContent = "Copied"; } };
 for (const [id, fs] of [["vwFull", true], ["vwWin", false]]) $(id).onclick = () => api("/api/admin/votewin", { fullscreen: fs });
 $("cpSave").onclick = async () => { const r = await api("/api/admin/closepin", { pin: $("cp").value }); say($("tm"), r.ok ? "Close PIN saved." : r.error, r.ok); $("cp").value = ""; };
+$("xbDir").oninput = () => { $("xbDir").dataset.dirty = "1"; };
+$("xbPick").onclick = async () => { if (window.pywebview?.api?.pick_folder) { const f = await window.pywebview.api.pick_folder(); if (f) { $("xbDir").value = f; $("xbDir").dataset.dirty = "1"; } } else say($("tm"), "Folder path එක type කරන්න.", false); };
+const xbSet = async (folder) => { const r = await api("/api/admin/extrabackup", { folder }); delete $("xbDir").dataset.dirty; say($("tm"), r.ok ? (folder ? (r.status.ok === false ? r.status.error : "Saved. Backup copied.") : "Turned off.") : r.error, r.ok && r.status.ok !== false); load(); };
+$("xbSave").onclick = () => xbSet($("xbDir").value.trim()); $("xbOff").onclick = () => xbSet("");
 $("bkNow").onclick = async () => { const r = await api("/api/admin/backup", {}); say($("tm"), r.ok ? "Backup saved." : r.error, r.ok); };
 $("openBtn").onclick = async () => { await api("/api/admin/open", { open: !R.open }); load(); };
 $("lockBtn").onclick = () => lockNow();
