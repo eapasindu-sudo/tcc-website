@@ -33,7 +33,7 @@
 <header class="bar">
   <img src="/logo.webp" alt="">
   <h1>Election Admin<small>ශිෂ්‍ය පාර්ලිමේන්තු ඡන්දය · පාලක පුවරුව</small></h1>
-  <span class="right row"><a class="btn ghost" href="/" target="_blank" style="background:#fff;color:var(--maroon)">Voting screen</a></span>
+  <span class="right row"><button class="ghost" id="vwFull" style="background:#fff">Open voting screen (full screen)</button><button class="ghost" id="vwWin" style="background:#fff">Voting screen in a window</button></span>
 </header>
 <main>
   <section class="card" id="login" hidden>
@@ -160,6 +160,7 @@ $("lf").onsubmit = async (e) => {
 };
 $("tunBtn").onclick = async () => { $("tunBtn").disabled = true; await api("/api/admin/tunnel", { on: !R.tunnel.running }); $("tunBtn").disabled = false; load(); };
 $("tunOut").onclick = (e) => { if (e.target.id === "tunCopy") { $("tunUrl").select(); navigator.clipboard?.writeText($("tunUrl").value); e.target.textContent = "Copied"; } };
+for (const [id, fs] of [["vwFull", true], ["vwWin", false]]) $(id).onclick = () => api("/api/admin/votewin", { fullscreen: fs });
 $("openBtn").onclick = async () => { await api("/api/admin/open", { open: !R.open }); load(); };
 
 $("cf").onsubmit = async (e) => {

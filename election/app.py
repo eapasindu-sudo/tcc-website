@@ -67,6 +67,19 @@ def tunnel_stop():
         p.terminate()
 
 
+# ---------- Voting screen window (opened from the admin panel) ----------
+WINDOWS = {"webview": None}
+
+
+def open_voting_window(fullscreen):
+    wv = WINDOWS["webview"]
+    url = f"http://127.0.0.1:{PORT}/"
+    if wv is None:
+        webbrowser.open(url)
+        return
+    wv.create_window("TCC Election · Voting", url, fullscreen=fullscreen, width=1200, height=820, min_size=(800, 600))
+
+
 def db():
     c = sqlite3.connect(DB_PATH, timeout=10)
     c.row_factory = sqlite3.Row
@@ -368,6 +381,9 @@ class H(BaseHTTPRequestHandler):
             with LOCK, db() as c:
                 c.execute("INSERT INTO voters(id,name,class,pin) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, class=excluded.class, pin=excluded.pin", (vid, data["name"].strip(), data.get("class", "").strip(), norm_pin(data.get("pin"))))
             return self.send(200, {"ok": True})
+        if p == "/api/admin/votewin":
+            open_voting_window(bool(data.get("fullscreen")))
+            return self.send(200, {"ok": True})
         if p == "/api/admin/tunnel":
             tunnel_start() if data.get("on") else tunnel_stop()
             return self.send(200, {"ok": True})
@@ -425,8 +441,9 @@ def main():
     if os.environ.get("TCC_ELECTION_HEADLESS"):
         threading.Event().wait()
     try:
-        import webview  # pywebview: a real Windows window
-        webview.create_window("TCC Student Parliament Election", url, fullscreen="--window" not in sys.argv, min_size=(900, 640))
+        import webview  # pywebview: real Windows windows, no browser needed
+        WINDOWS["webview"] = webview
+        webview.create_window("TCC Election · Admin", url + "/admin", width=1280, height=860, min_size=(900, 640), maximized=True)
         webview.start()
         tunnel_stop()
         os._exit(0)
