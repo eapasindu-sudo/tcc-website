@@ -467,17 +467,14 @@ PIN_RE = ("pin", "password", "රහස්")
 ID_RE = ("admission", "index", "adm", "reg", "ඇතුළත්", "ඇතුලත්", "විභාග අංක", "id")
 
 
-def read_rows(filename, raw):
+def read_sheets(filename, raw):
+    """Each sheet as a list of rows (a .csv file is one sheet)."""
     if filename.lower().endswith(".csv"):
         text = raw.decode("utf-8-sig", errors="replace")
-        return [r for r in csv.reader(io.StringIO(text))]
+        return [list(csv.reader(io.StringIO(text)))]
     import openpyxl
     wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
-    rows = []
-    for ws in wb.worksheets:
-        for r in ws.iter_rows(values_only=True):
-            rows.append(["" if v is None else v for v in r])
-    return rows
+    return [[["" if v is None else v for v in r] for r in ws.iter_rows(values_only=True)] for ws in wb.worksheets]
 
 
 def detect(rows):
@@ -487,7 +484,7 @@ def detect(rows):
             if i not in taken and t and any(w in t for w in words):
                 return i
         return None
-    for hi, row in enumerate(rows[:20]):
+    for hi, row in enumerate(rows[:30]):
         taken = set()
         taken.add(pin := find(row, PIN_RE, taken))
         idc = find(row, ID_RE, taken); taken.add(idc)
@@ -498,31 +495,63 @@ def detect(rows):
     return None
 
 
+CLASS_LABELS = ("class", "grade", "පන්තිය", "ශ්‍රේණිය", "ශ්‍රේණිය", "ශ්රේණිය")
+
+
+def sheet_class(rows, hi):
+    """Class written above the table, e.g. a row "class | 11-D" or "ශ්‍රේණිය : | 11-D"."""
+    for r in rows[:hi]:
+        for i, v in enumerate(r):
+            t = str(v).strip().lower().rstrip(":").strip()
+            if t and any(t.startswith(l) for l in CLASS_LABELS) and len(t) < 20:
+                for w in r[i + 1:]:
+                    w = str(w).strip()
+                    if w and w != ":" and len(w) <= 12:
+                        return w
+    return None
+
+
+def file_class(filename):
+    m = re.search(r"(\d{1,2})\s*[-_ ]?\s*([A-Za-z])(?![A-Za-z])", os.path.splitext(os.path.basename(filename))[0].replace("grade", "").replace("Grade", ""))
+    return f"{m.group(1)}-{m.group(2).upper()}" if m else ""
+
+
 def import_students(filename, raw, replace):
-    rows = read_rows(filename, raw)
-    found = detect(rows)
-    if not found:
-        raise ValueError("Could not find the name and admission/index number columns. Make sure the file has a heading row such as: Admission No | Name | Class")
-    hi, idc, namec, clsc, pinc = found
+    sheets = read_sheets(filename, raw)
+    found_any = None
     added = skipped = 0
     seen = set()
+    classes = set()
     with LOCK, db() as c:
         if replace:
             c.execute("DELETE FROM voters WHERE voted=0")
-        for r in rows[hi + 1:]:
-            if len(r) <= max(idc, namec):
+        for rows in sheets:
+            found = detect(rows)
+            if not found:
                 continue
-            vid, name = norm_id(r[idc]), str(r[namec]).strip()
-            # skip repeated heading rows (files with one sheet/table per class)
-            if not vid or not name or any(w in name.lower() for w in NAME_RE) or vid in seen:
-                skipped += 1 if (vid or name) else 0
-                continue
-            seen.add(vid)
-            cls = str(r[clsc]).strip() if clsc is not None and len(r) > clsc else ""
-            pin = norm_pin(r[pinc]) if pinc is not None and len(r) > pinc else None
-            c.execute("INSERT INTO voters(id,name,class,pin) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, class=excluded.class, pin=excluded.pin", (vid, name, cls, pin))
-            added += 1
-    return {"added": added, "skipped": skipped, "columns": {"id": rows[hi][idc], "name": rows[hi][namec], "class": rows[hi][clsc] if clsc is not None else None, "pin": rows[hi][pinc] if pinc is not None else None}}
+            hi, idc, namec, clsc, pinc = found
+            found_any = found_any or (rows[hi], found)
+            default_cls = sheet_class(rows, hi) or file_class(filename)
+            for r in rows[hi + 1:]:
+                if len(r) <= max(idc, namec):
+                    continue
+                vid, name = norm_id(r[idc]), str(r[namec]).strip()
+                # skip empty rows, repeated headings, totals and other non-student rows
+                if not vid or not name or not any(ch.isalpha() for ch in name) or not any(ch.isdigit() for ch in vid) \
+                        or any(w in name.lower() for w in NAME_RE) or vid in seen:
+                    skipped += 1 if (vid or name) and vid not in seen else 0
+                    continue
+                seen.add(vid)
+                cls = str(r[clsc]).strip() if clsc is not None and len(r) > clsc and str(r[clsc]).strip() else default_cls
+                classes.add(cls)
+                pin = norm_pin(r[pinc]) if pinc is not None and len(r) > pinc else None
+                c.execute("INSERT INTO voters(id,name,class,pin) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, class=excluded.class, pin=excluded.pin", (vid, name, cls, pin))
+                added += 1
+    if not found_any:
+        raise ValueError("Could not find the name and admission/index number columns. Make sure the file has a heading row such as: Admission No | Name | Class")
+    head, (hi, idc, namec, clsc, pinc) = found_any
+    return {"added": added, "skipped": skipped, "classes": sorted(x for x in classes if x),
+            "columns": {"id": str(head[idc]).strip(), "name": str(head[namec]).strip(), "class": str(head[clsc]).strip() if clsc is not None else None, "pin": head[pinc] if pinc is not None else None}}
 
 
 # ---------- HTTP ----------

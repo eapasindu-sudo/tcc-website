@@ -143,9 +143,9 @@
     <!-- Students -->
     <section class="card" data-tab="students">
       <h2>ඡන්ද දායකයින් · Students</h2>
-      <p class="help">Upload an Excel (.xlsx) or CSV file. The name, class and admission/index number columns are found automatically. Students with the same number are updated, not added twice.</p>
+      <p class="help">Excel (.xlsx) හෝ CSV files තෝරන්න. පන්ති කීපයක files එකවර තෝරන්නත් පුළුවන්. නම, ඇතුළත්වීමේ අංකය සහ පන්තිය (file එකේ "class" පේළියෙන් හෝ file නමෙන්) තනියම හොයාගන්නවා. Students with the same number are updated, not added twice.</p>
       <div class="row">
-        <input id="s-file" type="file" accept=".xlsx,.csv" style="max-width:340px">
+        <input id="s-file" type="file" accept=".xlsx,.csv" multiple style="max-width:340px">
         <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="s-replace" style="width:auto"> Replace the current list (students who already voted are kept)</label>
         <button id="s-up">Upload</button>
       </div>
@@ -416,12 +416,14 @@ $("clist").onclick = async (e) => {
   }
 };
 $("s-up").onclick = async () => {
-  const f = $("s-file").files[0]; if (!f) return say($("sm"), "Choose a file first.", false);
-  $("s-up").disabled = true; say($("sm"), "Reading the file…", true);
-  const r = await api("/api/admin/students", { filename: f.name, file: await readFile(f), replace: $("s-replace").checked });
-  $("s-up").disabled = false;
-  if (!r.ok) return say($("sm"), r.error, false);
-  say($("sm"), `Added or updated ${r.added} students. Columns used: number = "${r.columns.id}", name = "${r.columns.name}"${r.columns.class ? `, class = "${r.columns.class}"` : " (no class column found)"}.`, true);
+  const files = [...$("s-file").files]; if (!files.length) return say($("sm"), "Choose a file first.", false);
+  $("s-up").disabled = true; const out = [];
+  for (const [n, f] of files.entries()) {
+    say($("sm"), `Reading ${f.name} (${n + 1} / ${files.length})…`, true);
+    const r = await api("/api/admin/students", { filename: f.name, file: await readFile(f), replace: $("s-replace").checked && n === 0 });
+    out.push(r.ok ? `✓ ${f.name}: ළමයින් ${r.added} (${r.classes.length ? "පන්තිය " + r.classes.join(", ") : "පන්තිය හොයාගන්න බැරි වුණා"})` : `✗ ${f.name}: ${r.error}`);
+  }
+  $("s-up").disabled = false; $("sm").hidden = false; $("sm").className = "msg " + (out.every((l) => l.startsWith("✓")) ? "ok" : "err"); $("sm").innerHTML = out.map(esc).join("<br>");
   $("s-file").value = ""; load(); loadVoters();
 };
 $("vf").onsubmit = async (e) => {
